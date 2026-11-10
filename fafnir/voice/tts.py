@@ -1,0 +1,155 @@
+"""Text-to-speech seam and the Speaker that plays it.
+
+`ElevenLabsTTS` is the only code that knows about ElevenLabs. `Speaker` takes
+sentences as they arrive, synthesizes the next one while the current one plays,
+and can be stopped instantly for interruption.
+"""
+from __future__ import annotations
+
+import queue
+import threading
+import time
+from typing import Callable, Iterator
+
+import httpx
+import sounddevice as sd
+
+from .recorder import pcm_level
+
+ELEVEN_URL = "https://api.elevenlabs.io/v1/text-to-speech/{voice_id}/stream"
+PCM_RATE = 24000  # matches output_format=pcm_24000 (16-bit mono little-endian)
+WRITE_BYTES = 2400  # 50 ms per write, so stop() takes effect fast
+
+
+class TTSError(Exception):
+    """Synthesis failed. `str(err)` is safe to show the user."""
+
+
+class ElevenLabsTTS:
+    def __init__(self, api_key: str, voice_id: str, model: str):
+        self.url = ELEVEN_URL.format(voice_id=voice_id)
+        self.model = model
+        self.http = httpx.Client(headers={"xi-api-key": api_key}, timeout=30.0)
+
+    def stream_pcm(self, text: str) -> Iterator[bytes]:
+        """Give me text, get back raw 24 kHz 16-bit mono PCM chunks as they're made."""
+        try:
+            with self.http.stream(
+                "POST",
+                self.url,
+                params={"output_format": f"pcm_{PCM_RATE}"},
+                json={"text": text, "model_id": self.model},
+            ) as r:
+                if r.status_code in (401, 403):
+                    raise TTSError("ElevenLabs rejected the key. Check ELEVENLABS_API_KEY in .env.")
+                if r.status_code == 404:
+                    raise TTSError("ElevenLabs voice not found. Check voice_id in config.toml.")
+                if r.status_code >= 400:
+                    r.read()
+                    raise TTSError(f"ElevenLabs error {r.status_code}: {r.text[:200]}")
+                carry = b""
+                for chunk in r.iter_bytes():
+                    data = carry + chunk
+                    cut = len(data) - (len(data) % 2)  # never split a 16-bit sample
+                    carry = data[cut:]
+                    if cut:
+                        yield data[:cut]
+        except httpx.TimeoutException:
+            raise TTSError("Speech synthesis timed out.")
+        except httpx.HTTPError:
+            raise TTSError("Couldn't reach ElevenLabs. Check your internet connection.")
+
+
+class Speaker:
+    """Queue sentences with say(); they play in order. stop() cuts everything off."""
+
+    def __init__(self, tts: ElevenLabsTTS, on_error: Callable[[str], None] = print):
+        self.tts = tts
+        self.on_error = on_error
+        self._gen = 0  # bumped by stop(); stale work is dropped
+        self._lock = threading.Lock()
+        self._pending = 0
+        self._idle = threading.Event()
+        self._idle.set()
+        self._sentences: queue.Queue = queue.Queue()
+        self._audio: queue.Queue = queue.Queue()
+        self.first_audio_at: float | None = None
+        self._level = 0.0
+        self._out = sd.RawOutputStream(samplerate=PCM_RATE, channels=1, dtype="int16")
+        self._out.start()
+        threading.Thread(target=self._synth_loop, daemon=True).start()
+        threading.Thread(target=self._play_loop, daemon=True).start()
+
+    # public API -----------------------------------------------------------
+    def say(self, sentence: str) -> None:
+        with self._lock:
+            self._pending += 1
+            self._idle.clear()
+            gen = self._gen
+        self._sentences.put((gen, sentence))
+
+    def stop(self) -> None:
+        with self._lock:
+            self._gen += 1
+            self._pending = 0
+            self._idle.set()
+        _drain(self._sentences)
+        _drain(self._audio)
+
+    @property
+    def speaking(self) -> bool:
+        return not self._idle.is_set()
+
+    def wait_idle(self, timeout: float | None = None) -> bool:
+        return self._idle.wait(timeout)
+
+    # workers --------------------------------------------------------------
+    def _synth_loop(self) -> None:
+        while True:
+            gen, sentence = self._sentences.get()
+            if gen != self._gen:
+                continue
+            try:
+                for pcm in self.tts.stream_pcm(sentence):
+                    if gen != self._gen:
+                        break
+                    self._audio.put((gen, pcm))
+            except TTSError as e:
+                if gen == self._gen:
+                    self.on_error(f"[voice: {e}]")
+            self._audio.put((gen, None))  # end-of-sentence marker
+
+    def _play_loop(self) -> None:
+        while True:
+            gen, pcm = self._audio.get()
+            if gen != self._gen:
+                continue
+            if pcm is None:
+                with self._lock:
+                    if gen == self._gen and self._pending > 0:
+                        self._pending -= 1
+                        if self._pending == 0:
+                            self._idle.set()
+                continue
+            if self.first_audio_at is None:
+                self.first_audio_at = time.monotonic()
+            for i in range(0, len(pcm), WRITE_BYTES):
+                if gen != self._gen:
+                    break
+                piece = pcm[i : i + WRITE_BYTES]
+                self._level = pcm_level(piece)
+                self._out.write(piece)
+            self._level = 0.0
+
+    @property
+    def level(self) -> float:
+        """0..1 loudness of what's playing now, for displays."""
+        return self._level if self.speaking else 0.0
+
+
+def _drain(q: queue.Queue) -> None:
+    try:
+        while True:
+            q.get_nowait()
+    except queue.Empty:
+        pass

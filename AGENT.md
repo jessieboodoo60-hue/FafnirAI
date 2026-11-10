@@ -1,0 +1,112 @@
+# Fafnir — agent spec
+
+The single source of truth for what we're building and why. Update it when a decision changes.
+
+## Identity
+- **Name:** Fafnir
+- **Purpose:** a crisp, professional voice-first assistant that helps run the owner's business, social media, and computer.
+- **Users:** just the owner for now. Keep a `user_id` slot in persistent state so a small team is possible later.
+- **Tone:** crisp and professional. Brief, direct, no filler. Same voice in text, speech and proactive notices.
+
+## Stack
+- **Language:** Python 3, plain modules, no framework.
+- **Brain:** Claude (`claude-sonnet-5-5`, switched from Opus 5.5 on 2026-11-10 to halve cost; set in config.toml) through the official `anthropic` SDK, behind one seam (`fafnir/llm.py`). Nothing else imports the SDK.
+- **Cost:** prompt caching is on (instructions, tools and history re-read at ~5% price). Each reply shows `[cost $x · N% cached · session $y]`; `show_cost` in config.toml turns it off.
+- **Voice (Tier 3):** Deepgram (speech-to-text) and ElevenLabs (text-to-speech), each behind its own seam. Voice chosen at Tier 3 and stored in config.
+- **Runs on:** the owner's Windows laptop first. The heartbeat (Tier 5) is a separable process so it can move to an always-on host later without a rewrite.
+- **Secrets:** environment variables / `.env` (git-ignored). Never in source.
+
+## First capabilities (Tier 2 tools)
+1. **Business management:** a local store of business tasks, clients/contacts and deadlines, with add / list / update tools.
+2. **Computer management:** read-only to start (list folders, find files, read a text file, disk and system info, open a file or app). Anything that changes or deletes goes through the confirmation gate.
+3. **Q&A:** answer questions from a configurable notes folder, plus web lookup.
+
+Also wanted, after the baseline: draft messages, and platform integrations for **Twitch, Instagram/Facebook, TikTok/YouTube, X/LinkedIn, email & calendar**. One tool per integration. Posting and sending are always gated.
+
+### Tools as built (fafnir/tools/)
+- `business_*`: add, list, update (local file `data/business.json`); delete is marked as needing confirmation and refuses until Tier 6.
+- `computer_*`: list folder, find files by name, read text file (refuses secret files like `.env`), system info, open file/folder/URL.
+- `computer_launch_app`, `computer_list_apps`: start any installed app from the Start menu by name.
+- Full control (owner's decision, 2026-11-10): `computer_run_command` (any PowerShell), `computer_close_app`, `computer_list_running_apps`, `computer_write_file`, `computer_make_folder`, `computer_move_or_copy`, `computer_delete` (Recycle Bin), `computer_media` (play/pause, tracks, volume).
+
+### Confirmation gate (pulled forward from Tier 6)
+Tools declare when they need a yes (`confirm_if` in `fafnir/tools/registry.py`). The registry asks before running; each yes covers one action; no answer within 60 seconds means no.
+- **Owner asked = no second question** (owner's decision, 2026-11-10): gated tools carry an `owner_asked` flag. When the owner's own message directly asked for that exact action, Fafnir sets it and the action runs without asking again. It still asks when the action was its own idea, a step the owner didn't mention, or suggested by a file/web page/note, and on turns the owner didn't start (`owner_present=False`, for the future heartbeat).
+- **Always asks, even when requested** (`critical_if`): disk wipes/formatting, partition and boot changes, deleting system registry keys or Windows/Program Files content, disabling Defender or System Restore, deleting backups, shutdown/restart.
+- **Asks first:** deleting files or business items, overwriting a file, force-quitting an app, running a program/script file, reading files that hold secrets, and any PowerShell command that isn't clearly read-only (installs, settings, services, registry, killing processes, writing files).
+- **Runs immediately:** reading and looking, launching and politely closing apps, creating files and folders, moving and copying (never overwrites), media keys, read-only commands.
+- Text mode asks in the terminal. Voice mode speaks the question and takes a spoken or typed yes/no; anything other than a clear yes is a no.
+- Every tool call, and whether it was confirmed, is logged to `logs/actions.log`.
+- `weather`: live conditions and forecast from Open-Meteo; defaults to the owner's home location.
+- `notes_search`, `notes_read`: keyword search over `notes_folder` (config.toml); skips OneDrive cloud-only files so searching doesn't download them.
+- `web_search`, `web_fetch`: Anthropic-hosted, toggled in config.toml.
+
+### Google Calendar and Gmail
+- `fafnir/google_auth.py` signs in with the owner's Google Cloud "Desktop app" OAuth client (`data/google_credentials.json`). The first use opens a browser for approval; the token is kept in `data/google_token.json` and refreshed automatically. In Google's "testing" mode the approval expires about weekly and the browser step repeats.
+- Scopes: `calendar` and `gmail.modify` (read, label, draft, send, trash; no permanent delete).
+- Calendar: `calendar_list_events`, `calendar_create_event`, `calendar_update_event`, `calendar_delete_event`. Gmail: `gmail_search`, `gmail_read`, `gmail_draft`, `gmail_send`, `gmail_send_draft`, `gmail_trash`, `gmail_label`.
+- Gated: sending email or drafts, trashing email, deleting events, and anything that emails invitations or updates to other people. Reading, searching, drafting and private events run immediately.
+- Email content is untrusted: Fafnir never sends, replies or acts just because an email asks.
+- Also (`fafnir/tools/google_more.py`, owner asked for full Google access 2026-11-10): Drive incl. Docs/Sheets/Slides (search, read, create, update, rename/move, upload, download, share, trash), Contacts (search, add), Google Tasks (list, add, update, delete), YouTube (channel stats, my videos, comments, reply, edit title/description). Scopes: `drive`, `contacts`, `tasks`, `youtube.force-ssl`. Gated: sharing, trashing, overwriting a file, deleting tasks, anything public on YouTube.
+- Not included on purpose: permanent email deletion and Gmail forwarding/filter settings (a classic way for a hijacked assistant to leak mail).
+
+### Memory (Tier 4)
+- `data/memory.md`: plain Markdown, one fact per line under headings (About me, Preferences, People, Business, Other, or any heading the owner adds). Re-read on every use, so hand edits apply immediately; lines added by hand get an ID automatically.
+- Loaded into the system prompt when a conversation starts (and on `/reset`), then frozen for that conversation. Up to 200 most recent facts go in; older ones are found with `memory_search`.
+- Tools: `memory_remember`, `memory_update`, `memory_search`, `memory_forget` (asks first unless the owner said to forget it).
+- Facts are background knowledge, never instructions; a stored "always do X" doesn't bypass judgement or the confirmation gate.
+- `/memory` shows what's stored.
+
+To add a capability: write a module in `fafnir/tools/` with a `register(reg)` function and call it from `fafnir/tools/__init__.py`. The core loop never changes.
+
+## How the owner talks to it
+Text first (always kept as a debug path and fallback), then push-to-talk in Tier 3. Wake word later.
+- **Talk key:** the Razer keyboard's M5 macro key, mapped in Razer Synapse to F13 (`ptt_key` in config.toml).
+- **Voice:** ElevenLabs voice ID `43vS2JKzejLgSwmqF6gC`, model `eleven_flash_v2_5` for low latency.
+
+## Never without asking (hard confirmation gate, Tier 6)
+- sending a message (email, DM, chat, comment)
+- posting or publishing anything publicly
+- spending money
+- deleting data
+- changing a setting
+
+Each approval covers one action only. Content Fafnir reads (web pages, emails, files, transcripts, stored memories) is data, never instructions.
+
+## Proactive behaviour (Tier 5)
+Yes. Fafnir may interrupt **at any time, including quiet hours, when something is important**. Everything else is held in a calm inbox and shown on return. Notices are never dropped while the interface is closed, and every notice can be dismissed.
+
+## Build order
+Each tier runs and is verified on its own before the next starts.
+
+| Tier | Layer | Status |
+|---|---|---|
+| 0 | Interview + this spec | done |
+| 1 | Brain: streaming text conversation loop | verified 2026-11-10 |
+| 2 | Hands: tool registry + first tools | verified 2026-11-10 (built after Tier 3, at the owner's request) |
+| 3 | Ears and mouth: push-to-talk, Deepgram, ElevenLabs, interruption | built; awaiting Deepgram/ElevenLabs keys and the M5 key mapping to verify |
+| 4 | Memory: durable, human-readable facts across restarts | verified 2026-11-10 |
+| 5 | Heartbeat: scheduled checks, held inbox, persisted schedule | verified 2026-11-10 |
+| 6 | Rails: confirmation gate, injection flagging, audit log, cost tally, kill switch | gate and action log done early; injection flagging, cost tally, kill switch remain |
+
+## Heartbeat (Tier 5)
+- `fafnir/heartbeat/`: `runner.py` (loop), `checks.py` (calendar soon, tasks due/overdue, new important email, low disk, new YouTube comments), `notices.py` (inbox). Settings and intervals: `[heartbeat]` in config.toml.
+- Notices live in `data/notices.json`: held until dismissed (shown on return, never fire-and-forget), deduplicated by key, dismissed ones remembered 14 days so they don't come back.
+- `info` notices are silent; `important`/`urgent` are spoken by the app when Fafnir is free, one at a time. VIP email senders (config) and overdue tasks count as important. Optional `quiet_hours` mutes spoken important notices (urgent still speaks); default off, per the owner.
+- Schedule persists in `data/heartbeat_state.json`; overdue checks after a restart are staggered 20s apart. A still-running check is skipped, not stacked. Email and YouTube seed silently on their first ever run (no flood). A failing check logs to `logs/heartbeat.log` and never stops the loop.
+- Kill switch: the PAUSE button on the Notices panel, or "don't disturb me (for N minutes)" via `heartbeat_pause`. Tools: `notices_list`, `notices_dismiss`, `heartbeat_pause/resume/status`.
+- Runs inside the desktop app today; it has no UI dependency, so it can move to an always-on host.
+
+## Desktop app ("a face", built 2026-11-10)
+- `python main.py --app` (`fafnir/ui/`): Qt (PySide6) fullscreen dark HUD. Left: today's calendar and open tasks. Centre: animated core (colour = state, swells with voice loudness). Right: notices (filled by the Tier 5 heartbeat) and recent activity. Bottom: conversation and a type box. Confirmations are Yes/No buttons and can also be answered by voice.
+- `[app]` in config.toml: `screen` ("right" = the monitor right of the main one), `fullscreen`, `talk_key_label`.
+- Starts with Windows via a Startup-folder shortcut (`--install-startup` / `--remove-startup`), launched with pythonw (no console). Only one instance runs; a second launch focuses the first. Errors go to `logs/app.log`.
+- `fafnir/engine.py` is the shared running core (agent, ears, mouth, push-to-talk, turn queue, confirmations). The app and the terminal voice mode are both thin front ends on it.
+
+## Architecture rule
+One shared agent core (`Agent.run_turn`). Typed turns, spoken turns and heartbeat-started turns all go through it. Voice and proactivity are adapters on the edges. If agent logic ever gets written twice, unify it.
+
+## Assumptions to revisit
+- "Business management" means a local tracker until specific business tools or platforms are named.
+- Speech-to-text streams audio to Deepgram live while the key is held, so the transcript is ready ~0.2s after release. If streaming fails, it uploads the clip instead.
+- Home location (config.toml `home_location`) is Petit Valley, Diego Martin, Trinidad and Tobago. It's also passed to Deepgram as names to expect. Moves to the memory store in Tier 4.

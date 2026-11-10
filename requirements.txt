@@ -1,0 +1,9 @@
+anthropic
+python-dotenv
+httpx
+sounddevice
+pynput
+websockets
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2

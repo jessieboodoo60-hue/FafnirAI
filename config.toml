@@ -1,0 +1,91 @@
+# Fafnir configuration. Tune here, not in code.
+
+[assistant]
+name = "Fafnir"
+purpose = "help the owner run their business, their social media, and their computer"
+tone = "crisp and professional: brief, direct, no filler"
+# Where the owner usually is. Used for weather, local time and "near me" questions.
+home_location = "Petit Valley, Diego Martin, Trinidad and Tobago"
+
+[model]
+# claude-sonnet-5-5 ($2/$10 per million tokens) is the everyday choice.
+# claude-opus-5-5 ($4/$20) is smarter on hard problems; claude-haiku-5-5 ($0.10/$0.50) is far cheaper but less capable.
+name = "claude-sonnet-5-5"
+# Where the brain runs: "api" uses Anthropic API credit (pay per token);
+# "claude_code" uses your Claude subscription through the installed Claude Code app.
+provider = "claude_code"
+max_tokens = 16000
+# low | medium | high | xhigh | max. Lower = faster and cheaper; raise for harder work.
+effort = "medium"
+# Show what each reply cost and how much was served from the cache.
+show_cost = true
+# Server-side fallback if the model declines a request (on by default for this model).
+fallbacks = true
+# SDK retries on rate limits, overloads and network errors.
+max_retries = 3
+timeout_seconds = 120
+
+[tools]
+# Folder of Markdown/text notes that notes_search looks through. "~" = your home folder.
+notes_folder = "~/OneDrive/Documents"
+# Web search and page fetching (run by Anthropic; billed per search).
+web = true
+web_max_uses = 5
+# Google Calendar + Gmail. Needs data/google_credentials.json (a Google Cloud "Desktop app"
+# OAuth client); the first use opens a browser to approve access.
+google = true
+
+[app]
+# Desktop app (python main.py --app). Which monitor to fill: "right", "left" or "above"
+# (relative to your main monitor), "primary", or a name like "DISPLAY2".
+screen = "right"
+fullscreen = true
+# What the talk key is called on your keyboard (shown on screen).
+talk_key_label = "M5"
+
+[heartbeat]
+# Background checks that let Fafnir reach out first. Notices appear in the app's Notices
+# panel; "important" ones are also spoken. Pause any time: say "don't disturb me" or click
+# the heartbeat button in the app. Set enabled = false under a check to turn it off.
+# Spoken announcements are muted during quiet hours (e.g. "23:00-07:00"); "" = never muted.
+quiet_hours = ""
+
+[heartbeat.calendar]
+every_minutes = 5
+lead_minutes = 15        # warn this long before an event starts
+
+[heartbeat.tasks]
+every_minutes = 30       # business tracker + Google Tasks due today or overdue
+
+[heartbeat.email]
+every_minutes = 10
+query = "is:unread is:important newer_than:2d"   # Gmail search for mail worth a notice
+vip_senders = []         # e.g. ["andre@example.com", "@client.com"]: these are spoken aloud
+
+[heartbeat.disk]
+every_minutes = 360
+min_free_gb = 20
+
+[heartbeat.youtube]
+every_minutes = 60
+videos = 3               # watch comments on this many of your latest videos
+
+[voice]
+# Key to hold while talking. Run `python main.py --learn-key` and press the key
+# to see its code. Accepts a name ("ctrl_r", "f13"), a single character, or "vk:<number>".
+ptt_key = "f13"
+# Short beeps when recording starts and when Fafnir has heard you.
+cue_sounds = true
+# Print how long each stage took (transcribe, first audio).
+show_timings = true
+
+[voice.stt]
+# Deepgram speech-to-text
+model = "nova-3"
+language = "en"
+
+[voice.tts]
+# ElevenLabs text-to-speech
+voice_id = "43vS2JKzejLgSwmqF6gC"
+# eleven_flash_v2_5 = lowest latency; eleven_multilingual_v2 = richest quality, slower.
+model = "eleven_flash_v2_5"
