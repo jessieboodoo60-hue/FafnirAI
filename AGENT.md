@@ -61,7 +61,7 @@ To add a capability: write a module in `fafnir/tools/` with a `register(reg)` fu
 
 ## How the owner talks to it
 Text first (always kept as a debug path and fallback), push-to-talk (Tier 3), and a wake word.
-- **Wake word "Fafnir"** (`fafnir/voice/wake.py`): Picovoice Porcupine on an always-open 16 kHz mic stream, fully offline until the word is heard. Then the same stream streams to Deepgram and a simple loudness detector ends the utterance after `end_silence_seconds` of quiet (gives up after 5 s of silence, caps at 20 s). Saying it while Fafnir talks interrupts (`while_speaking`). Same turn path and confirmation handling as push-to-talk. Needs `PICOVOICE_ACCESS_KEY` and a Windows `.ppn` file (`[voice.wake]` in config.toml).
+- **Wake word "Fafnir"** (`fafnir/voice/wake.py`, `kws.py`): fully local, no account (owner declined Picovoice, 2026-11-10). An always-open 16 kHz mic stream; each burst of speech is compared (MFCC features + dynamic time warping, numpy only) with the owner's own recordings in `data/wake/` (`python main.py --train-wake`, 6 samples, self-calibrating threshold). Audio only leaves the PC after a match. Then the same stream goes to Deepgram and a loudness detector ends the utterance after `end_silence_seconds` of quiet (gives up after 5 s, caps at 20 s). Saying it while Fafnir talks interrupts (`while_speaking`). Same turn path and confirmations as push-to-talk. Speaker-dependent: tuned to the owner's voice and mic.
 - **Talk key:** the Razer keyboard's M5 macro key, mapped in Razer Synapse to F13 (`ptt_key` in config.toml).
 - **Voice:** ElevenLabs voice ID `43vS2JKzejLgSwmqF6gC`, model `eleven_flash_v2_5` for low latency.
 

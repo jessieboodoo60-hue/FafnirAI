@@ -48,6 +48,10 @@ def main(argv: list[str] | None = None) -> int:
     if "--learn-key" in argv:
         from .voice.ptt import learn_key
         return learn_key()
+    if "--train-wake" in argv:
+        from .config import ROOT
+        from .voice.wake import record_samples
+        return record_samples(ROOT / "data" / "wake")
     if "--install-startup" in argv or "--remove-startup" in argv:
         from .ui.install import install, remove
         return install() if "--install-startup" in argv else remove()

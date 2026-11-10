@@ -66,6 +66,12 @@ Add `DEEPGRAM_API_KEY` and `ELEVENLABS_API_KEY` to `.env`, then:
 
 Hold the talk key, speak, release. Press it again while Fafnir is talking to cut it off. Typing still works in voice mode, and typed replies are spoken too. `/stop` silences it, `/reset` clears the conversation.
 
-**Wake word:** say "Fafnir" instead of holding the key, then talk; Fafnir stops listening when you pause for a second. Say it while Fafnir is talking to cut it off. It runs offline (Picovoice Porcupine): get a free AccessKey at console.picovoice.ai, put it in `.env` as `PICOVOICE_ACCESS_KEY=...`, train the wake word "Fafnir" for **Windows** in the Console, and save the downloaded `.ppn` file as `assets\wake\Fafnir_en_windows.ppn`. Settings are under `[voice.wake]` in `config.toml` (to try it before training, set `keyword = "jarvis"`).
+**Wake word:** say "Fafnir" instead of holding the key, then talk; Fafnir stops listening when you pause for a second. Say it while Fafnir is talking to cut it off. It runs entirely on this PC by comparing what you say with recordings of your own voice. Record them once (close the app first so the mic is free):
+
+```
+.venv\Scripts\python main.py --train-wake
+```
+
+It asks you to say "Fafnir" 6 times. The recordings stay in `data\wake\` (not uploaded anywhere). If it triggers by mistake, lower `sensitivity` under `[voice.wake]` in `config.toml`; if it misses you, raise it or re-record.
 
 To set the talk key: in Razer Synapse, assign the M5 macro key to F13 (or any unused key), then run `.venv\Scripts\python main.py --learn-key`, press it, and copy the `ptt_key` line it prints into `config.toml`.

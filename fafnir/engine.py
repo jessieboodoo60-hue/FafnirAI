@@ -52,6 +52,18 @@ class _NeverDone:
     done = False
 
 
+def mentions_name(text: str, name: str) -> bool:
+    """Does a transcript start with something like the assistant's name? Speech recognition
+    may spell an unusual name oddly ("Fafner", "Fav near"), so match loosely, and only in
+    the first few words."""
+    import difflib
+    import re
+    words = re.findall(r"[a-z']+", text.lower())[:4]
+    target = name.lower()
+    candidates = words + ["".join(words[i:i + 2]) for i in range(len(words) - 1)]
+    return any(difflib.SequenceMatcher(None, c, target).ratio() >= 0.6 for c in candidates)
+
+
 def _beep(freq: int, ms: int) -> None:
     try:
         import winsound
@@ -92,15 +104,13 @@ class Engine:
 
     def _setup_wake(self) -> None:
         v = self.cfg.voice
-        if not v.picovoice_access_key:
-            self.wake_problem = "Wake word off: add PICOVOICE_ACCESS_KEY to .env."
-            return
         try:
+            from .config import ROOT
             from .voice.wake import WakeWord
-            self.wake = WakeWord(v.picovoice_access_key, v.wake_keyword, v.wake_sensitivity,
+            self.wake = WakeWord(ROOT / "data" / "wake", v.wake_sensitivity,
                                  on_wake=self._wake_detected, on_chunk=None, on_done=self._wake_done,
-                                 end_silence=v.wake_end_silence)
-        except Exception as e:  # bad key, missing .ppn, no mic
+                                 end_silence=v.wake_end_silence, name=self.name)
+        except Exception as e:  # no recordings yet, or no mic
             self.wake = None
             self.wake_problem = f"Wake word off: {e}"
 
@@ -246,14 +256,15 @@ class Engine:
             return
         self._utterance_ready(wav, live)
 
-    def _utterance_ready(self, wav: bytes, live) -> None:
-        """Something was said (key released, or silence after the wake word)."""
+    def _utterance_ready(self, wav: bytes, live, kind: str = "audio") -> None:
+        """Something was said (key released, or silence after the wake word).
+        kind "wake_audio" means it began with the wake word, which gets double-checked."""
         if self.cfg.voice.cue_sounds:
             _beep(880, 60)
         if self._confirm_answer is not None:
             threading.Thread(target=self._answer_confirm_from_audio, args=(wav, live), daemon=True).start()
             return
-        self.turns.put(("audio", wav, live, time.monotonic()))
+        self.turns.put((kind, wav, live, time.monotonic()))
 
     # ---- wake word -------------------------------------------------------------
     def _wake_detected(self) -> bool:
@@ -285,7 +296,7 @@ class Engine:
                 live.abort()
             self.events.notice("Didn't hear anything after the wake word.")
             return
-        self._utterance_ready(wav, live)
+        self._utterance_ready(wav, live, kind="wake_audio")
 
     def _answer_confirm_from_audio(self, wav: bytes, live) -> None:
         answers = self._confirm_answer
@@ -340,7 +351,7 @@ class Engine:
             self.busy = True
             try:
                 stats = TurnStats()
-                if kind == "audio":
+                if kind in ("audio", "wake_audio"):
                     try:
                         text, how = self._transcribe(payload, live)
                     except STTError as e:
@@ -349,6 +360,10 @@ class Engine:
                     stats.transcribe = f"{time.monotonic() - started:.1f}s ({how})"
                     if not text:
                         self.events.notice("Didn't catch that.")
+                        continue
+                    if kind == "wake_audio" and not mentions_name(text, self.name):
+                        # the local matcher fired but Deepgram didn't hear the name: a false alarm
+                        self.events.notice("Ignored: that didn't sound like my name.")
                         continue
                     self.events.heard(text)
                 else:
