@@ -370,13 +370,16 @@ class Engine:
                     text = payload
                 if self.cancel.is_set():
                     continue
-                self._run(text, started, stats)
+                self._run(text, started, stats, source="typed" if kind == "text" else "spoken")
             except Exception as e:  # never let the worker die
                 self.events.error(f"Something went wrong: {type(e).__name__}: {e}")
             finally:
                 self.busy = False
 
-    def _run(self, text: str, started: float, stats: TurnStats) -> None:
+    def _run(self, text: str, started: float, stats: TurnStats, source: str = "") -> None:
+        from .tools import CONVERSATIONS
+        CONVERSATIONS.append("user", text, source)
+        said: list[str] = []
         chunker = SentenceChunker()
         if self.speaker:
             self.speaker.first_audio_at = None
@@ -392,6 +395,7 @@ class Engine:
         def on_text(t: str) -> None:
             if not first_word and t.strip():
                 first_word.append(time.monotonic())
+            said.append(t)
             self.events.reply_text(t)
             say(chunker.feed(t))
 
@@ -408,6 +412,7 @@ class Engine:
             self.events.error(str(e))
             return
         interrupted = reply.stop_reason == "interrupted"
+        CONVERSATIONS.append("assistant", "".join(said) + (" [interrupted]" if interrupted else ""))
         if not interrupted:
             say(chunker.flush())
         if first_word:

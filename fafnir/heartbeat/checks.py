@@ -106,6 +106,19 @@ def youtube_comments(ctx: CheckContext) -> list[Notice]:
     return out
 
 
+def backup(ctx: CheckContext) -> list[Notice]:
+    """Daily copy of personal data to the backup folder. Silent unless it fails."""
+    from ..backup import DEFAULT_FOLDER, make_backup
+    try:
+        r = make_backup(ctx.settings.get("folder", DEFAULT_FOLDER), int(ctx.settings.get("keep", 14)))
+        ctx.state["last_ok"] = r["file"]
+        return []
+    except Exception as e:
+        return [Notice(key=f"backup-failed:{date.today().isoformat()}", check="backup",
+                       title="Today's backup of your Fafnir data failed",
+                       detail=str(e)[:140], urgency="important")]
+
+
 def default_checks(settings: dict) -> list[Check]:
     def every(name: str, default: float) -> float:
         return float(settings.get(name, {}).get("every_minutes", default))
@@ -115,4 +128,5 @@ def default_checks(settings: dict) -> list[Check]:
         Check("email", every("email", 10), email_new, seed_first_run=True),
         Check("disk", every("disk", 360), disk_space),
         Check("youtube", every("youtube", 60), youtube_comments, seed_first_run=True),
+        Check("backup", every("backup", 1440), backup),
     ]

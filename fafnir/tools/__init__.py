@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from ..config import ROOT, Config
+from ..conversations import ConversationLog
 from ..heartbeat.notices import NoticeStore
 from ..memory import MemoryStore
 from . import apps, business, computer, control, heartbeat_tools, memory_tools, notes, weather
@@ -11,12 +12,13 @@ from .registry import Registry
 # (filled in by whichever front end starts it).
 NOTICES = NoticeStore(ROOT / "data" / "notices.json")
 HEARTBEAT: dict = {}
+CONVERSATIONS = ConversationLog(ROOT / "data" / "conversations")
 
 
 def build_registry(cfg: Config, memory: MemoryStore) -> Registry:
     t = cfg.tools
     reg = Registry(log_path=ROOT / "logs" / "actions.log")
-    memory_tools.register(reg, memory)
+    memory_tools.register(reg, memory, CONVERSATIONS)
     heartbeat_tools.register(reg, NOTICES, HEARTBEAT)
     business.register(reg, ROOT / "data")
     computer.register(reg)

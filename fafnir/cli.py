@@ -48,6 +48,9 @@ def main(argv: list[str] | None = None) -> int:
     if "--learn-key" in argv:
         from .voice.ptt import learn_key
         return learn_key()
+    if "--backup" in argv:
+        from .backup import main as backup_main
+        return backup_main()
     if "--train-wake" in argv:
         from .config import ROOT
         from .voice.wake import record_samples
@@ -119,9 +122,18 @@ def text_loop(cfg, agent: Agent) -> int:
         def on_tool(tname, args, result, is_error):
             _print(describe_tool_call(tname, args, result, is_error) + f"{name.lower()}> ")
 
+        from .tools import CONVERSATIONS
+        CONVERSATIONS.append("user", user, "typed")
+        said: list[str] = []
+
+        def on_text(t: str) -> None:
+            said.append(t)
+            _print(t)
+
         before = agent.llm.usage.copy()
         try:
-            agent.run_turn(user, on_text=_print, on_tool=on_tool, confirm=confirm_in_terminal)
+            agent.run_turn(user, on_text=on_text, on_tool=on_tool, confirm=confirm_in_terminal)
+            CONVERSATIONS.append("assistant", "".join(said))
             print("\n")
             if cfg.model.show_cost:
                 print(cost_line(agent.llm.usage, before) + "\n")

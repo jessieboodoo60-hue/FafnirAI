@@ -284,6 +284,7 @@ class MainWindow(QWidget):
         self._build()
         self._wire()
         self._load_recent_activity()
+        self._load_today_conversation()
         self.refresh_panels()
 
     # layout
@@ -622,6 +623,22 @@ class MainWindow(QWidget):
             self.p_tasks.set_items(items, "No open tasks.")
         else:
             self.p_tasks.set_items([(d.get("tasks_error", ""), "", C_BAD)])
+
+    def _load_today_conversation(self) -> None:
+        """Reopen with today's conversation so far (Fafnir remembers it too)."""
+        try:
+            from ..tools import CONVERSATIONS
+            entries = CONVERSATIONS.today()[-40:]
+        except Exception:
+            entries = []
+        if not entries:
+            return
+        self._write(self._new_line(), "EARLIER TODAY", C_DIM, small=True)
+        for e in entries:
+            who = "YOU" if e["role"] == "user" else self.cfg.assistant.name.upper()
+            self._speaker(f"{who} · {e['time'][11:16]}", C_DIM if e["role"] == "user" else C_ACCENT)
+            self._write(self._new_line(), e["text"], C_DIM)
+        self._write(self._new_line(14), "─" * 24 + "  now  " + "─" * 24, C_LINE)
 
     def _load_recent_activity(self) -> None:
         path = ROOT / "logs" / "actions.log"

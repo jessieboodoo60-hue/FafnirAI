@@ -38,11 +38,16 @@ def describe_tool_call(name: str, args, result: str | None, is_error: bool) -> s
 
 def build_agent(cfg: Config) -> Agent:
     """The one agent core every front end uses."""
+    from .tools import CONVERSATIONS
     memory = MemoryStore(ROOT / "data" / "memory.md")
+
+    def system_prompt() -> str:  # built at the start of each conversation, then frozen
+        return build_system_prompt(cfg.assistant, memory.prompt_block(), CONVERSATIONS.prompt_block())
+
     if cfg.model.provider == "claude_code":
         from .claude_code import ClaudeCodeAgent
         agent = ClaudeCodeAgent(
-            lambda: build_system_prompt(cfg.assistant, memory.prompt_block()),
+            system_prompt,
             build_registry(cfg, memory),
             turn_context,
             model=cfg.model.name,
@@ -53,7 +58,7 @@ def build_agent(cfg: Config) -> Agent:
         return agent
     agent = Agent(
         LLM(cfg.model, cfg.anthropic_api_key),
-        lambda: build_system_prompt(cfg.assistant, memory.prompt_block()),
+        system_prompt,
         build_registry(cfg, memory),
         turn_context=turn_context,
     )

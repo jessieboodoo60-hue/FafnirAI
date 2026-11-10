@@ -9,7 +9,9 @@ The single source of truth for what we're building and why. Update it when a dec
 - **Tone:** crisp and professional. Brief, direct, no filler. Same voice in text, speech and proactive notices.
 
 ## Stack
-- **Language:** Python 3, plain modules, no framework.
+- **Language:** Python 3.13 (moved from 3.15 on 2026-11-10 after a 3.15 lazy-import bug broke tools; the 3.15 workaround in `fafnir/__init__.py` stays as a harmless safeguard). Plain modules, no framework.
+- **Conversations:** every exchange is logged to `data/conversations/YYYY-MM-DD.jsonl`; new conversations get the last ~36 hours in the system prompt (background, not instructions); `conversation_search` reaches back a year; the app reopens with today's chat.
+- **Backups:** the heartbeat's `backup` check zips `data/`, `.env` and `config.toml` to `D:/FafnirBackups` daily, keeping 14 (`[heartbeat.backup]`); code is on GitHub.
 - **Brain:** Claude (`claude-sonnet-5-5`, switched from Opus 5.5 on 2026-11-10 to halve cost; set in config.toml) through the official `anthropic` SDK, behind one seam (`fafnir/llm.py`). Nothing else imports the SDK.
 - **Cost:** prompt caching is on (instructions, tools and history re-read at ~5% price). Each reply shows `[cost $x · N% cached · session $y]`; `show_cost` in config.toml turns it off.
 - **Voice (Tier 3):** Deepgram (speech-to-text) and ElevenLabs (text-to-speech), each behind its own seam. Voice chosen at Tier 3 and stored in config.

@@ -66,6 +66,11 @@ vip_senders = []         # e.g. ["andre@example.com", "@client.com"]: these are 
 every_minutes = 360
 min_free_gb = 20
 
+[heartbeat.backup]
+every_minutes = 1440     # once a day: zips data\, .env and config.toml
+folder = "D:/FafnirBackups"
+keep = 14                # newest copies kept
+
 [heartbeat.youtube]
 every_minutes = 60
 videos = 3               # watch comments on this many of your latest videos

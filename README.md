@@ -22,6 +22,12 @@ Opens Fafnir fullscreen on your right-hand monitor (change `screen` under `[app]
 
 To stop it starting with Windows: `.venv\Scripts\python main.py --remove-startup` (and `--install-startup` to turn it back on). If the app misbehaves, errors are in `logs\app.log`.
 
+## Conversations and backups
+
+Fafnir remembers recent conversations across restarts: the app reopens with today's chat, and new conversations start knowing the last day or so. Ask "what did we talk about on Monday?" for older ones. The log is in `data\conversations\` (one file per day; delete any you like).
+
+Your personal data (`data\`, `.env`, `config.toml`) is zipped to `D:\FafnirBackups` once a day while the app runs, keeping the last 14 copies; you get a notice only if a backup fails. Run one by hand with `.venv\Scripts\python main.py --backup`. To restore, unzip the newest file into the project folder. The code itself is on GitHub.
+
 ## Heartbeat (Fafnir reaching out)
 
 While the app is open, Fafnir checks in the background: meetings starting soon, tasks due or overdue, new important email, low disk space, and new YouTube comments. Findings show in the **Notices** panel (✕ to dismiss, CLEAR for all) and stay there until you dismiss them, even across restarts. Important ones are also spoken. Click **PAUSE** or say "don't disturb me for an hour" to silence it. Tune what it checks and how often under `[heartbeat]` in `config.toml`, e.g. add your key clients to `vip_senders` so their emails are announced.
