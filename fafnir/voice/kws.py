@@ -98,12 +98,14 @@ def dtw_distance(template: np.ndarray, seq: np.ndarray, open_end: bool = True) -
             row[j] = cost[i, j] + b
             row_steps[j] = s + 1
         D[i], steps[i] = row, row_steps
+    if not open_end:  # whole-to-whole comparison (used to compare the owner's own samples)
+        return float(D[T - 1, N - 1] / steps[T - 1, N - 1])
     lo = max(1, int(T * 0.6))   # the match must cover a sensible length of the input
-    hi = min(N, int(T * 1.6) + start_slack) if open_end else N
+    hi = min(N, int(T * 1.6) + start_slack)
     if lo > hi:
         return float("inf")
     end = D[T - 1, lo - 1:hi] / steps[T - 1, lo - 1:hi]
-    return float(end.min()) if open_end else float(D[T - 1, N - 1] / steps[T - 1, N - 1])
+    return float(end.min())
 
 
 class Spotter:
@@ -121,7 +123,9 @@ class Spotter:
             raise ValueError(
                 f"Not enough wake word recordings in {folder}. Run: python main.py --train-wake")
         cal = json.loads((folder / "calibration.json").read_text()) if (folder / "calibration.json").exists() else {}
-        base = cal.get("threshold") or calibrate(self.templates)
+        base = cal.get("threshold")
+        if not isinstance(base, (int, float)) or not np.isfinite(base) or base <= 0:
+            base = calibrate(self.templates)  # missing or broken calibration: redo it
         # sensitivity 0..1 scales the threshold: 0.5 = as calibrated, higher = easier to trigger
         self.threshold = base * (0.8 + 0.4 * sensitivity)
         self.max_len = max(len(t) for t in self.templates)
@@ -141,4 +145,7 @@ def calibrate(templates: list[np.ndarray]) -> float:
     """Threshold from how alike the owner's own recordings are to each other."""
     d = [dtw_distance(a, b, open_end=False) for i, a in enumerate(templates)
          for j, b in enumerate(templates) if i != j]
+    d = [x for x in d if np.isfinite(x)]
+    if not d:
+        raise ValueError("Couldn't compare the wake word recordings; please record them again.")
     return float(np.mean(d) + 1.0 * np.std(d)) * 1.08
