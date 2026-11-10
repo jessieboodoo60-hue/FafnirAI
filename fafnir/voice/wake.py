@@ -207,10 +207,14 @@ def record_samples(folder: Path, count: int = 6, word: str = "Fafnir") -> int:
     saved = 0
     while saved < count:
         input(f"  [{saved + 1}/{count}] Press Enter, then say \"{word}\"...")
+        print("     Listening...", flush=True)
         pcm = _record_one(noise)
         secs = len(pcm) / (2 * RATE)
+        if not pcm:
+            print("     Didn't hear anything. Is the right microphone selected and unmuted? Try again.")
+            continue
         if secs < 0.25 or secs > 2.0:
-            print(f"     Didn't catch a clear word ({secs:.1f}s). Let's try that one again.")
+            print(f"     That was {secs:.1f}s; I need just the one word. Let's try that one again.")
             continue
         with wave.open(str(folder / f"sample_{saved + 1}.wav"), "wb") as w:
             w.setnchannels(1)
@@ -238,23 +242,37 @@ def _measure_noise() -> float:
 
 
 def _record_one(noise: float) -> bytes:
-    """Record until speech has started and then stopped; trim the silence around it."""
+    """Record until a word has been said and then stopped; trim the silence around it.
+
+    Sounds shorter than ~0.15 s (like the click of the Enter key just pressed) are ignored,
+    and listening only starts 0.35 s after Enter, so the key press itself isn't recorded."""
     threshold = max(0.05, noise * 3)
-    frames, started, quiet, t0 = [], None, 0, time.monotonic()
+    frame_s = FRAME / RATE
     with sd.RawInputStream(samplerate=RATE, channels=1, dtype="int16", blocksize=FRAME) as s:
-        while time.monotonic() - t0 < 6:
-            data, _ = s.read(FRAME)
-            data = bytes(data)
+        t0 = time.monotonic()
+        while time.monotonic() - t0 < 0.35:        # let the Enter key click pass
+            s.read(FRAME)
+        pre: list[bytes] = []
+        burst: list[bytes] = []
+        loud_frames = quiet = 0
+        while time.monotonic() - t0 < 7:
+            data = bytes(s.read(FRAME)[0])
             loud = pcm_level(data) > threshold
-            if started is None:
-                frames = (frames + [data])[-PRE_ROLL // 2:]
+            if not burst:
+                pre = (pre + [data])[-4:]
                 if loud:
-                    started = len(frames)
+                    burst, loud_frames, quiet = list(pre), 1, 0
+                continue
+            burst.append(data)
+            if loud:
+                loud_frames += 1
+                quiet = 0
             else:
-                frames.append(data)
-                quiet = 0 if loud else quiet + 1
-                if quiet * FRAME / RATE > 0.35:
-                    break
-    if started is None:
-        return b""
-    return b"".join(frames[: len(frames) - max(0, quiet - 3)])
+                quiet += 1
+            if quiet * frame_s > 0.4:               # the word has ended
+                if loud_frames * frame_s >= 0.15:   # long enough to be speech
+                    return b"".join(burst[: len(burst) - max(0, quiet - 3)])
+                burst, pre, loud_frames, quiet = [], [], 0, 0   # a click or bump: keep waiting
+        if burst and loud_frames * frame_s >= 0.15:
+            return b"".join(burst)
+    return b""
