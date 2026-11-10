@@ -79,6 +79,17 @@ cue_sounds = true
 # Print how long each stage took (transcribe, first audio).
 show_timings = true
 
+[voice.wake]
+# Say the wake word instead of holding the talk key (the key still works).
+# Runs offline with Picovoice Porcupine; needs PICOVOICE_ACCESS_KEY in .env.
+enabled = true
+# Your custom "Fafnir" word file from Picovoice Console, or a built-in word to test with
+# ("jarvis", "computer", "terminator", ...).
+keyword = "assets/wake/Fafnir_en_windows.ppn"
+sensitivity = 0.6            # 0-1: higher catches more, but false-triggers more
+end_silence_seconds = 1.0    # how long a pause means you've finished talking
+while_speaking = true        # say the wake word to cut Fafnir off mid-sentence
+
 [voice.stt]
 # Deepgram speech-to-text
 model = "nova-3"

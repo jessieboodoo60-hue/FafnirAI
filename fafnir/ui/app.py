@@ -548,8 +548,12 @@ class MainWindow(QWidget):
         self.date.setText(now.strftime("%A %d %B").replace(" 0", " "))
         state = self.engine.state
         if state == "idle":
-            text, color = ((f"READY · HOLD {self.talk_key} TO TALK", C_ACCENT) if self.engine.voice
-                           else ("READY · TYPE BELOW (VOICE OFF)", C_DIM))
+            if not self.engine.voice:
+                text, color = "READY · TYPE BELOW (VOICE OFF)", C_DIM
+            elif self.engine.wake:
+                text, color = f"READY · SAY “{self.engine.wake.name.upper()}” OR HOLD {self.talk_key}", C_ACCENT
+            else:
+                text, color = f"READY · HOLD {self.talk_key} TO TALK", C_ACCENT
         else:
             text, color = STATUS_TEXT.get(state, STATUS_TEXT["idle"])
         self.status.setText(text)

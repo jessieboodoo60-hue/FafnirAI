@@ -84,23 +84,59 @@ class Engine:
                                    on_error=lambda m: self.events.error(m))
             self.recorder = Recorder()
             self.ptt = PushToTalk(v.ptt_key, self._ptt_down, self._ptt_up)
+        self.wake = None
+        self.wake_problem = ""           # why the wake word is off, for displays
+        self._wake_live = None
+        if self.voice and cfg.voice.wake_enabled:
+            self._setup_wake()
+
+    def _setup_wake(self) -> None:
+        v = self.cfg.voice
+        if not v.picovoice_access_key:
+            self.wake_problem = "Wake word off: add PICOVOICE_ACCESS_KEY to .env."
+            return
+        try:
+            from .voice.wake import WakeWord
+            self.wake = WakeWord(v.picovoice_access_key, v.wake_keyword, v.wake_sensitivity,
+                                 on_wake=self._wake_detected, on_chunk=None, on_done=self._wake_done,
+                                 end_silence=v.wake_end_silence)
+        except Exception as e:  # bad key, missing .ppn, no mic
+            self.wake = None
+            self.wake_problem = f"Wake word off: {e}"
 
     # ---- lifecycle ---------------------------------------------------------
     def start(self) -> None:
         threading.Thread(target=self._worker, daemon=True).start()
         if self.ptt:
             self.ptt.start()
+        if self.wake:
+            try:
+                self.wake.start()
+            except Exception as e:
+                self.wake_problem = f"Wake word off: couldn't open the microphone ({e})."
+                self.wake = None
+        if self.wake_problem:
+            self.events.notice(self.wake_problem)
 
     def stop(self) -> None:
         self.interrupt()
         if self.ptt:
             self.ptt.stop()
+        if self.wake:
+            try:
+                self.wake.stop()
+            except Exception:
+                pass
 
     # ---- state for displays ------------------------------------------------
     @property
+    def listening(self) -> bool:
+        return bool((self.recorder and self.recorder.recording) or (self.wake and self.wake.capturing))
+
+    @property
     def state(self) -> str:
         """idle | listening | thinking | speaking | confirming"""
-        if self.recorder and self.recorder.recording:
+        if self.listening:
             return "listening"
         if self.pending_confirm:
             return "confirming"
@@ -115,6 +151,8 @@ class Engine:
         """0..1 loudness of the mic (while listening) or of Fafnir's voice."""
         if self.recorder and self.recorder.recording:
             return self.recorder.level
+        if self.wake and self.wake.capturing:
+            return self.wake.level
         if self.speaker:
             return self.speaker.level
         return 0.0
@@ -206,12 +244,48 @@ class Engine:
                 live.abort()
             self.events.notice("Too short, ignored.")
             return
+        self._utterance_ready(wav, live)
+
+    def _utterance_ready(self, wav: bytes, live) -> None:
+        """Something was said (key released, or silence after the wake word)."""
         if self.cfg.voice.cue_sounds:
             _beep(880, 60)
         if self._confirm_answer is not None:
             threading.Thread(target=self._answer_confirm_from_audio, args=(wav, live), daemon=True).start()
             return
         self.turns.put(("audio", wav, live, time.monotonic()))
+
+    # ---- wake word -------------------------------------------------------------
+    def _wake_detected(self) -> bool:
+        """Called from the audio thread when the wake word is heard. Returns True to start
+        capturing what's said next."""
+        if self.recorder and self.recorder.recording:
+            return False  # already talking with the key held
+        if self.speaker and self.speaker.speaking and not self.cfg.voice.wake_while_speaking:
+            return False
+        if self._confirm_answer is not None:
+            self.speaker.stop()  # answering a confirmation: don't cancel the turn
+        else:
+            self.interrupt()
+        try:
+            self._wake_live = self.stt.start_live(self.wake.rate)
+            self.wake.set_on_chunk(self._wake_live.send)
+        except Exception:
+            self._wake_live = None
+            self.wake.set_on_chunk(None)
+        if self.cfg.voice.cue_sounds:
+            _beep(660, 60)
+        return True
+
+    def _wake_done(self, wav: bytes, seconds: float) -> None:
+        self.wake.set_on_chunk(None)
+        live, self._wake_live = self._wake_live, None
+        if seconds < MIN_SECONDS:
+            if live:
+                live.abort()
+            self.events.notice("Didn't hear anything after the wake word.")
+            return
+        self._utterance_ready(wav, live)
 
     def _answer_confirm_from_audio(self, wav: bytes, live) -> None:
         answers = self._confirm_answer

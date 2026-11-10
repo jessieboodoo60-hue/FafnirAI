@@ -59,6 +59,13 @@ class VoiceConfig:
     tts_model: str
     deepgram_api_key: str
     elevenlabs_api_key: str
+    # wake word ("Fafnir"): Picovoice Porcupine, runs on this PC
+    wake_enabled: bool = False
+    wake_keyword: str = ""          # path to a .ppn file, or a built-in word like "jarvis"
+    wake_sensitivity: float = 0.6
+    wake_end_silence: float = 1.0   # seconds of quiet that end what you're saying
+    wake_while_speaking: bool = True  # say the wake word to interrupt Fafnir mid-sentence
+    picovoice_access_key: str = ""
 
     def missing_keys(self) -> list[str]:
         missing = []
@@ -111,7 +118,20 @@ def _voice(raw: dict) -> VoiceConfig:
         tts_model=tts.get("model", "eleven_flash_v2_5"),
         deepgram_api_key=os.environ.get("DEEPGRAM_API_KEY", "").strip(),
         elevenlabs_api_key=os.environ.get("ELEVENLABS_API_KEY", "").strip(),
+        wake_enabled=bool(v.get("wake", {}).get("enabled", False)),
+        wake_keyword=_wake_path(str(v.get("wake", {}).get("keyword", ""))),
+        wake_sensitivity=float(v.get("wake", {}).get("sensitivity", 0.6)),
+        wake_end_silence=float(v.get("wake", {}).get("end_silence_seconds", 1.0)),
+        wake_while_speaking=bool(v.get("wake", {}).get("while_speaking", True)),
+        picovoice_access_key=os.environ.get("PICOVOICE_ACCESS_KEY", "").strip(),
     )
+
+
+def _wake_path(keyword: str) -> str:
+    """Relative .ppn paths are relative to the project folder."""
+    if keyword.lower().endswith(".ppn") and not Path(keyword).is_absolute():
+        return str(ROOT / keyword)
+    return keyword
 
 
 def load_config(path: Path | None = None) -> Config:

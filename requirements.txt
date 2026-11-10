@@ -4,6 +4,9 @@ httpx
 sounddevice
 pynput
 websockets
+pvporcupine
+claude-agent-sdk
+PySide6
 google-api-python-client
 google-auth-oauthlib
 google-auth-httplib2
