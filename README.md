@@ -22,6 +22,15 @@ Opens Fafnir fullscreen on your right-hand monitor (change `screen` under `[app]
 
 To stop it starting with Windows: `.venv\Scripts\python main.py --remove-startup` (and `--install-startup` to turn it back on). If the app misbehaves, errors are in `logs\app.log`.
 
+## Your phone (Telegram)
+
+Fafnir can message you on Telegram and you can message it back from anywhere (the PC must be on with the app running).
+1. In Telegram, open **@BotFather**, send `/newbot`, pick a name and a username ending in `bot`, and copy the token it gives you.
+2. Add it to `.env`: `TELEGRAM_BOT_TOKEN=...` and restart the app.
+3. The app shows a line like `send /pair 123456 to @yourbot`; send exactly that to your bot. Only your Telegram account can use it from then on.
+
+Then just message it like you'd talk to it. Risky actions you ask for from the phone come with Yes/No buttons. Important notices are pushed to the phone (`[phone]` in `config.toml`: "important", "urgent" or "all"). `/pause` and `/resume` in the chat control notices.
+
 ## Conversations and backups
 
 Fafnir remembers recent conversations across restarts: the app reopens with today's chat, and new conversations start knowing the last day or so. Ask "what did we talk about on Monday?" for older ones. The log is in `data\conversations\` (one file per day; delete any you like).

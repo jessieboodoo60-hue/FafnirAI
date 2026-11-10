@@ -100,6 +100,10 @@ Each tier runs and is verified on its own before the next starts.
 - Kill switch: the PAUSE button on the Notices panel, or "don't disturb me (for N minutes)" via `heartbeat_pause`. Tools: `notices_list`, `notices_dismiss`, `heartbeat_pause/resume/status`.
 - Runs inside the desktop app today; it has no UI dependency, so it can move to an always-on host.
 
+## Phone link (Telegram)
+- `fafnir/phone.py`: a private Telegram bot (token `TELEGRAM_BOT_TOKEN`), long-polled from the app, so no inbound ports. Paired once with a 6-digit code shown in the app; only that chat id (`data/phone.json`) is listened to, everyone else is ignored.
+- Phone messages are owner turns through the same Engine (`source="phone"`): answered by text, not spoken at the PC; confirmations for phone requests get Yes/No inline buttons (PC answers still work). Important/urgent notices are pushed once (`pushed` flag), respecting heartbeat pause. `/pause`, `/resume`.
+
 ## Desktop app ("a face", built 2026-11-10)
 - `python main.py --app` (`fafnir/ui/`): Qt (PySide6) fullscreen dark HUD. Left: today's calendar and open tasks. Centre: animated core (colour = state, swells with voice loudness). Right: notices (filled by the Tier 5 heartbeat) and recent activity. Bottom: conversation and a type box. Confirmations are Yes/No buttons and can also be answered by voice.
 - `[app]` in config.toml: `screen` ("right" = the monitor right of the main one), `fullscreen`, `talk_key_label`.

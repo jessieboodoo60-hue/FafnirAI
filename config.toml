@@ -43,6 +43,12 @@ fullscreen = true
 # What the talk key is called on your keyboard (shown on screen).
 talk_key_label = "M5"
 
+[phone]
+# Reach you on your phone through a private Telegram bot (needs TELEGRAM_BOT_TOKEN in .env).
+enabled = true
+# Which notices to push: "important" (the ones Fafnir says out loud), "urgent", or "all".
+send = "important"
+
 [heartbeat]
 # Background checks that let Fafnir reach out first. Notices appear in the app's Notices
 # panel; "important" ones are also spoken. Pause any time: say "don't disturb me" or click

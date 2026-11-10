@@ -31,6 +31,7 @@ class Notice:
     status: str = "new"          # new | dismissed
     announced: bool = False      # spoken aloud already (important/urgent)
     dismissed_at: str = ""
+    pushed: bool = False         # sent to the owner's phone already
 
 
 class NoticeStore:
@@ -85,6 +86,14 @@ class NoticeStore:
                     count += 1
             self._save(items)
             return count
+
+    def mark_pushed(self, notice_id: str) -> None:
+        with self._lock:
+            items = self._load()
+            for n in items:
+                if n.id == notice_id:
+                    n.pushed = True
+            self._save(items)
 
     def mark_announced(self, notice_id: str) -> None:
         with self._lock:

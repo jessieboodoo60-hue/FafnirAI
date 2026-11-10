@@ -87,6 +87,7 @@ class Bridge(QObject, Events):
     sig_confirm = Signal(str)
     sig_confirm_done = Signal(bool, bool)
     sig_panels = Signal(object)
+    sig_info = Signal(str)        # status lines from other parts (phone link)
 
     def heard(self, text): self.sig_heard.emit(text)
     def reply_start(self): self.sig_reply_start.emit()
@@ -380,6 +381,7 @@ class MainWindow(QWidget):
         b.sig_confirm.connect(lambda a: self.confirm.ask(a, self.talk_key))
         b.sig_confirm_done.connect(self.on_confirm_done)
         b.sig_panels.connect(self.on_panels)
+        b.sig_info.connect(lambda t: self._append_text(f"📱 {t}", C_DIM))
         self.input.returnPressed.connect(self.on_enter)
         QShortcut(QKeySequence("Escape"), self, activated=self.engine.interrupt)
         QShortcut(QKeySequence("F11"), self, activated=self.toggle_fullscreen)
@@ -771,4 +773,8 @@ def run_app(argv: list[str]) -> int:
         win.showFullScreen()
     engine.start()
     heartbeat.start()
+    from ..phone import make_bridge
+    phone = make_bridge(engine, NOTICES, on_status=bridge.sig_info.emit, name=cfg.assistant.name)
+    if phone is not None:
+        phone.start()
     return app.exec()

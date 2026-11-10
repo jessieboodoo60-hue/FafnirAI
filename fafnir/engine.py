@@ -82,6 +82,8 @@ class Engine:
         self._live = None                # Deepgram live session for the current utterance
         self._confirm_answer: queue.Queue | None = None
         self.pending_confirm: str | None = None
+        self.confirm_notifiers: list = []   # extra places to ask for a yes/no (the phone)
+        self.current_source = ""            # where the turn in progress came from
         self.voice = voice and not cfg.voice.missing_keys()
         self.speaker = self.recorder = self.stt = self.ptt = None
         if self.voice:
@@ -168,16 +170,18 @@ class Engine:
         return 0.0
 
     # ---- inputs --------------------------------------------------------------
-    def submit_text(self, text: str) -> None:
-        """A typed message, or a typed answer to a pending yes/no."""
+    def submit_text(self, text: str, source: str = "typed", reply=None) -> None:
+        """A typed message (or one from the phone), or a typed answer to a pending yes/no.
+        `reply(text)` is called with Fafnir's answer, for front ends elsewhere (the phone)."""
         text = text.strip()
         if not text:
             return
         if self._confirm_answer is not None:
             self._confirm_answer.put(text)
             return
-        self.interrupt()
-        self.turns.put(("text", text, None, time.monotonic()))
+        if source != "phone":  # a phone message shouldn't cut off what's playing at the PC
+            self.interrupt()
+        self.turns.put(("text", text, None, time.monotonic(), {"source": source, "reply": reply}))
 
     def answer_confirm(self, approved: bool) -> None:
         if self._confirm_answer is not None:
@@ -208,9 +212,14 @@ class Engine:
         self._confirm_answer = answers
         self.pending_confirm = action
         self.events.confirm_request(action)
-        if self.cfg.voice.cue_sounds:
+        for notify in list(self.confirm_notifiers):  # e.g. Yes/No buttons on the phone
+            try:
+                notify(action, self.current_source)
+            except Exception:
+                pass
+        if self.cfg.voice.cue_sounds and self.current_source != "phone":
             _beep(520, 120)
-        if self.speaker:
+        if self.speaker and self.current_source != "phone":
             self.speaker.say(f"I need your OK. {action.split(CONFIRM_MARK)[0]} Yes or no?")
         timed_out = False
         try:
@@ -264,7 +273,7 @@ class Engine:
         if self._confirm_answer is not None:
             threading.Thread(target=self._answer_confirm_from_audio, args=(wav, live), daemon=True).start()
             return
-        self.turns.put((kind, wav, live, time.monotonic()))
+        self.turns.put((kind, wav, live, time.monotonic(), {"source": "spoken"}))
 
     # ---- wake word -------------------------------------------------------------
     def _wake_detected(self) -> bool:
@@ -346,7 +355,7 @@ class Engine:
     # ---- the one worker that runs turns --------------------------------------
     def _worker(self) -> None:
         while True:
-            kind, payload, live, started = self.turns.get()
+            kind, payload, live, started, extra = self.turns.get()
             self.cancel.clear()
             self.busy = True
             try:
@@ -370,15 +379,16 @@ class Engine:
                     text = payload
                 if self.cancel.is_set():
                     continue
-                self._run(text, started, stats, source="typed" if kind == "text" else "spoken")
+                self._run(text, started, stats, source=extra.get("source", "typed"), reply=extra.get("reply"))
             except Exception as e:  # never let the worker die
                 self.events.error(f"Something went wrong: {type(e).__name__}: {e}")
             finally:
                 self.busy = False
 
-    def _run(self, text: str, started: float, stats: TurnStats, source: str = "") -> None:
+    def _run(self, text: str, started: float, stats: TurnStats, source: str = "", reply=None) -> None:
         from .tools import CONVERSATIONS
         CONVERSATIONS.append("user", text, source)
+        self.current_source = source
         said: list[str] = []
         chunker = SentenceChunker()
         if self.speaker:
@@ -388,7 +398,7 @@ class Engine:
         first_word: list[float] = []
 
         def say(sentences) -> None:
-            if self.speaker:
+            if self.speaker and source != "phone":  # phone replies are sent as text, not spoken
                 for s in sentences:
                     self.speaker.say(s)
 
@@ -405,19 +415,26 @@ class Engine:
 
         self.events.reply_start()
         try:
-            reply = self.agent.run_turn(
+            turn = self.agent.run_turn(
                 text, on_text=on_text, cancel=self.cancel, on_tool=on_tool, confirm=self.confirm
             )
         except LLMError as e:
             self.events.error(str(e))
+            if reply:
+                reply(f"Sorry, that didn't work: {e}")
             return
-        interrupted = reply.stop_reason == "interrupted"
-        CONVERSATIONS.append("assistant", "".join(said) + (" [interrupted]" if interrupted else ""))
+        finally:
+            self.current_source = ""
+        interrupted = turn.stop_reason == "interrupted"
+        answer = "".join(said).strip()
+        CONVERSATIONS.append("assistant", answer + (" [interrupted]" if interrupted else ""))
+        if reply:
+            reply(answer + (" [interrupted]" if interrupted else "") if answer else "(Done.)")
         if not interrupted:
             say(chunker.flush())
         if first_word:
             stats.first_word = first_word[0] - brain_start
-        if self.speaker and not interrupted:
+        if self.speaker and not interrupted and source != "phone":
             deadline = time.monotonic() + 15
             while self.speaker.first_audio_at is None and self.speaker.speaking and time.monotonic() < deadline:
                 time.sleep(0.05)
