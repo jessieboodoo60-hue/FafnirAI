@@ -22,7 +22,16 @@ Opens Fafnir fullscreen on your right-hand monitor (change `screen` under `[app]
 
 To stop it starting with Windows: `.venv\Scripts\python main.py --remove-startup` (and `--install-startup` to turn it back on). If the app misbehaves, errors are in `logs\app.log`.
 
-## Your phone (WhatsApp)
+## Your phone (Discord)
+
+Fafnir DMs you on Discord and you can DM it back from anywhere (the PC must be on with the app running).
+1. Go to discord.com/developers/applications → **New Application** (name it Fafnir) → **Bot** → **Reset Token**, copy it into `.env` as `DISCORD_BOT_TOKEN=...`.
+2. **OAuth2 → URL Generator**: tick `bot`, open the generated link, and add the bot to a small private server of your own (Discord only lets bots DM people they share a server with).
+3. Restart the app; it shows `DM the bot ... /pair 123456`. Send exactly that to the bot in a DM. Only your account can use it from then on.
+
+Risky actions you ask for from the phone come with Yes / No buttons. Important notices are DMed to you (`send` under `[phone]` in `config.toml`). `/pause` and `/resume` control notices.
+
+## Your phone (WhatsApp) — waiting on Meta business verification
 
 Fafnir can message you on WhatsApp and you can message it back from anywhere (the PC must be on with the app running). It uses Meta's official WhatsApp Business Cloud API, so Fafnir writes from its own number (Meta's free test number), not yours. Setup steps are in the chat where this was built; in short: a Meta developer app with WhatsApp, a permanent system-user token, your number added as a test recipient, a free ngrok static domain, and the webhook pointed at `https://<your-domain>/webhook` with the verify token the app shows. Secrets go in `.env` (see `.env.example`), the rest under `[phone]` in `config.toml`.
 

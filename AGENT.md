@@ -100,7 +100,11 @@ Each tier runs and is verified on its own before the next starts.
 - Kill switch: the PAUSE button on the Notices panel, or "don't disturb me (for N minutes)" via `heartbeat_pause`. Tools: `notices_list`, `notices_dismiss`, `heartbeat_pause/resume/status`.
 - Runs inside the desktop app today; it has no UI dependency, so it can move to an always-on host.
 
-## Phone link (WhatsApp, owner's choice 2026-11-11; Telegram version dropped)
+## Phone link (Discord, active)
+- `fafnir/discord_link.py`: private Discord bot (`DISCORD_BOT_TOKEN`, discord.py), outbound gateway connection, no tunnels. Paired once with a code shown in the app; only that user id (`data/discord.json`) is heard, only in DMs. Owner turns use `source="phone:discord"`, answered by DM; confirmations get Yes/No buttons; important notices DMed once.
+- Both phone links run side by side; each only shows confirmation buttons for requests that came through it.
+
+## Phone link (WhatsApp — blocked by Meta until business verification, 2026-11-11, owner's choice 2026-11-11; Telegram version dropped)
 - `fafnir/phone.py`: official WhatsApp Business Cloud API (Graph v23.0). Fafnir sends from its own business/test number. Incoming messages arrive at a local webhook (127.0.0.1:8787) exposed by an ngrok static domain that Fafnir starts; every delivery is HMAC-checked with the app secret, and only the owner's number (`WHATSAPP_OWNER_NUMBER`) is acted on.
 - Phone messages are owner turns through the same Engine (`source="phone"`), answered by text; confirmations get Yes/No reply buttons. Important notices are pushed once (skipped if older than 6 h). WhatsApp's 24-hour rule: free text only within 24 h of the owner's last message; outside it, alerts need `alert_template` (an approved Utility template) or they stay in the Notices panel.
 

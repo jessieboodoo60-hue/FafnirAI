@@ -287,11 +287,11 @@ class WhatsAppBridge:
             self.send("Notices are back on.")
             return
         self.on_status(f"From your phone: {text}")
-        self.engine.submit_text(text, source="phone", reply=lambda answer: self.send(answer))
+        self.engine.submit_text(text, source="phone:whatsapp", reply=lambda answer: self.send(answer))
 
     # ---- confirmations ---------------------------------------------------------------------
     def _confirm_on_phone(self, action: str, source: str) -> None:
-        if source != "phone":
+        if source != "phone:whatsapp":
             return  # requests made at the PC are confirmed at the PC
         main, _, cmd = action.partition(CONFIRM_MARK)
         text = f"I need your OK:\n{main}" + (f"\n\n{cmd}" if cmd else "") + "\n\n(No answer in 60 seconds means no.)"

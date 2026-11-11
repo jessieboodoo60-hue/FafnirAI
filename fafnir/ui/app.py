@@ -773,8 +773,13 @@ def run_app(argv: list[str]) -> int:
         win.showFullScreen()
     engine.start()
     heartbeat.start()
-    from ..phone import make_bridge
-    phone = make_bridge(engine, NOTICES, on_status=bridge.sig_info.emit, name=cfg.assistant.name)
-    if phone is not None:
-        phone.start()
+    # phone links: Discord now, WhatsApp once Meta approves the business (either may be unset)
+    from .. import discord_link, phone as whatsapp
+    for make in (discord_link.make_bridge, whatsapp.make_bridge):
+        try:
+            link = make(engine, NOTICES, on_status=bridge.sig_info.emit, name=cfg.assistant.name)
+            if link is not None:
+                link.start()
+        except Exception as e:
+            bridge.sig_info.emit(f"Phone link failed to start: {e}")
     return app.exec()

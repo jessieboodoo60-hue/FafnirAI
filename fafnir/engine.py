@@ -179,7 +179,7 @@ class Engine:
         if self._confirm_answer is not None:
             self._confirm_answer.put(text)
             return
-        if source != "phone":  # a phone message shouldn't cut off what's playing at the PC
+        if not source.startswith("phone"):  # a phone message shouldn't cut off what's playing at the PC
             self.interrupt()
         self.turns.put(("text", text, None, time.monotonic(), {"source": source, "reply": reply}))
 
@@ -217,9 +217,9 @@ class Engine:
                 notify(action, self.current_source)
             except Exception:
                 pass
-        if self.cfg.voice.cue_sounds and self.current_source != "phone":
+        if self.cfg.voice.cue_sounds and not self.current_source.startswith("phone"):
             _beep(520, 120)
-        if self.speaker and self.current_source != "phone":
+        if self.speaker and not self.current_source.startswith("phone"):
             self.speaker.say(f"I need your OK. {action.split(CONFIRM_MARK)[0]} Yes or no?")
         timed_out = False
         try:
@@ -398,7 +398,7 @@ class Engine:
         first_word: list[float] = []
 
         def say(sentences) -> None:
-            if self.speaker and source != "phone":  # phone replies are sent as text, not spoken
+            if self.speaker and not source.startswith("phone"):  # phone replies are sent as text, not spoken
                 for s in sentences:
                     self.speaker.say(s)
 
@@ -434,7 +434,7 @@ class Engine:
             say(chunker.flush())
         if first_word:
             stats.first_word = first_word[0] - brain_start
-        if self.speaker and not interrupted and source != "phone":
+        if self.speaker and not interrupted and not source.startswith("phone"):
             deadline = time.monotonic() + 15
             while self.speaker.first_audio_at is None and self.speaker.speaking and time.monotonic() < deadline:
                 time.sleep(0.05)
