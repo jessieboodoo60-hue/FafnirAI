@@ -60,6 +60,22 @@ class ElevenLabsTTS:
             raise TTSError("Couldn't reach ElevenLabs. Check your internet connection.")
 
 
+    def synth_ogg(self, text: str) -> bytes:
+        """Whole utterance as Ogg/Opus (the format of Discord voice messages)."""
+        try:
+            r = self.http.post(self.url.removesuffix("/stream"), params={"output_format": "opus_48000_64"},
+                               json={"text": text, "model_id": self.model}, timeout=60)
+        except httpx.HTTPError as e:
+            raise TTSError(f"Couldn't reach ElevenLabs ({type(e).__name__}).")
+        if r.status_code in (401, 403):
+            raise TTSError("ElevenLabs rejected the key, or you're out of characters this month.")
+        if r.status_code >= 400:
+            raise TTSError(f"ElevenLabs error {r.status_code}: {r.text[:200]}")
+        if r.content[:4] != b"OggS":
+            raise TTSError("ElevenLabs didn't return Ogg audio.")
+        return r.content
+
+
 class Speaker:
     """Queue sentences with say(); they play in order. stop() cuts everything off."""
 

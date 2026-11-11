@@ -101,7 +101,7 @@ Each tier runs and is verified on its own before the next starts.
 - Runs inside the desktop app today; it has no UI dependency, so it can move to an always-on host.
 
 ## Phone link (Discord, active)
-- `fafnir/discord_link.py`: private Discord bot (`DISCORD_BOT_TOKEN`, discord.py), outbound gateway connection, no tunnels. Paired once with a code shown in the app; only that user id (`data/discord.json`) is heard, only in DMs. Owner turns use `source="phone:discord"`, answered by DM; confirmations get Yes/No buttons; important notices DMed once.
+- `fafnir/discord_link.py`: private Discord bot (`DISCORD_BOT_TOKEN`, discord.py), outbound gateway connection, no tunnels. Paired once with a code shown in the app; only that user id (`data/discord.json`) is heard, only in DMs. Owner turns use `source="phone:discord"`, answered by DM; a voice note in gets a voice note out (Deepgram transcribes the Ogg/Opus attachment, ElevenLabs `opus_48000_64` reply posted as a real voice message with flag 1<<13), text in gets text out; confirmations get Yes/No buttons; important notices DMed once.
 - Both phone links run side by side; each only shows confirmation buttons for requests that came through it.
 
 ## Phone link (WhatsApp — blocked by Meta until business verification, 2026-11-11, owner's choice 2026-11-11; Telegram version dropped)

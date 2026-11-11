@@ -15,15 +15,18 @@ lets a bot DM people it shares a server with, so the bot sits in a small private
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import os
 import random
+import struct
 import threading
 import tomllib
 from datetime import datetime, timedelta
 from typing import Callable
 
 import discord
+import httpx
 
 from .config import ROOT
 from .tools.control import CONFIRM_MARK
@@ -141,8 +144,12 @@ class DiscordBridge:
         if message.author.bot or not isinstance(message.channel, discord.DMChannel):
             return  # only DMs, never server channels
         text = (message.content or "").strip()
-        if not text:
+        voice = next((a for a in message.attachments
+                      if a.is_voice_message() or (a.content_type or "").startswith("audio/")), None)
+        if not text and voice is None:
             return
+        if voice is not None and not self.owner_id:
+            return  # pairing is by text only
         if not self.owner_id:
             if self.pair_code and text in (f"/pair {self.pair_code}", self.pair_code):
                 self.state["owner_id"] = message.author.id
@@ -154,6 +161,9 @@ class DiscordBridge:
             return
         if message.author.id != self.owner_id:
             return  # a stranger: ignore completely
+        if voice is not None:  # a voice note: transcribe it, and answer with a voice note
+            await self._voice_turn(message, voice)
+            return
         low = text.lower()
         if low in ("/help", "help"):
             await message.channel.send("Message me anything, like you'd say it at the PC. "
@@ -170,6 +180,60 @@ class DiscordBridge:
         async with message.channel.typing():
             pass  # show "typing…" briefly; the reply arrives when Fafnir finishes
         self.engine.submit_text(text, source=SOURCE, reply=lambda answer: self.send(answer))
+
+    # ---- voice notes ---------------------------------------------------------------------------
+    async def _voice_turn(self, message: discord.Message, att: discord.Attachment) -> None:
+        """Voice note in -> transcribe (Deepgram) -> Fafnir -> spoken reply (ElevenLabs) as a voice note."""
+        stt, tts = self._voice_tools()
+        if stt is None:
+            await message.channel.send("I can't listen to voice notes: Deepgram isn't set up. Send text instead.")
+            return
+        audio = await att.read()
+        loop = asyncio.get_running_loop()
+        try:
+            text = (await loop.run_in_executor(None, stt.transcribe, audio,
+                                               att.content_type or "audio/ogg")).strip()
+        except Exception as e:
+            await message.channel.send(f"I couldn't make out that voice note ({e}).")
+            return
+        if not text:
+            await message.channel.send("I couldn't hear anything in that voice note.")
+            return
+        self.on_status(f"From your phone (voice): {text}")
+        channel_id = message.channel.id
+
+        def reply(answer: str) -> None:
+            if self.loop:
+                asyncio.run_coroutine_threadsafe(self._send_voice(channel_id, answer, tts), self.loop)
+
+        self.engine.submit_text(text, source=SOURCE, reply=reply)
+
+    def _voice_tools(self):
+        cfg = self.engine.cfg.voice
+        stt = getattr(self.engine, "stt", None)
+        if stt is None and cfg.deepgram_api_key:
+            from .voice.stt import DeepgramSTT
+            stt = DeepgramSTT(cfg.deepgram_api_key, cfg.stt_model, cfg.stt_language, [self.name])
+        tts = None
+        if cfg.elevenlabs_api_key:
+            from .voice.tts import ElevenLabsTTS
+            tts = ElevenLabsTTS(cfg.elevenlabs_api_key, cfg.tts_voice_id, cfg.tts_model)
+        return stt, tts
+
+    async def _send_voice(self, channel_id: int, answer: str, tts) -> None:
+        """Speak the answer and post it as a real Discord voice message (falls back to text)."""
+        from .voice.sentences import clean_for_speech
+        spoken = clean_for_speech(answer)[:1500]
+        if tts is None or not spoken:
+            await self._send(answer)
+            return
+        loop = asyncio.get_running_loop()
+        try:
+            ogg = await loop.run_in_executor(None, tts.synth_ogg, spoken)
+            await loop.run_in_executor(None, _post_voice_message, self.token, channel_id, ogg, spoken)
+        except Exception as e:
+            self.on_status(f"Couldn't send a voice reply ({e}); sent text instead.")
+            await self._send(answer)
 
     # ---- confirmations -----------------------------------------------------------------------
     def _confirm_on_phone(self, action: str, source: str) -> None:
@@ -200,6 +264,37 @@ class DiscordBridge:
                 icon = {"urgent": "🚨", "important": "🔔"}.get(n.urgency, "•")
                 if await self._send(f"{icon} **{n.title}**" + (f"\n{n.detail}" if n.detail else "")):
                     self.notices.mark_pushed(n.id)
+
+
+def _ogg_duration(ogg: bytes) -> float:
+    """Length of Ogg/Opus audio from the last page's granule position (48 kHz clock)."""
+    last = ogg.rfind(b"OggS")
+    if last < 0 or len(ogg) < last + 14:
+        return 1.0
+    return max(0.5, struct.unpack("<q", ogg[last + 6:last + 14])[0] / 48000)
+
+
+def _waveform(text: str, points: int = 64) -> str:
+    """Discord shows a waveform on voice messages; a gentle speech-like shape is enough."""
+    rnd = random.Random(hash(text))
+    vals, level = [], 120
+    for _ in range(points):
+        level = max(30, min(230, level + rnd.randint(-45, 45)))
+        vals.append(level)
+    return base64.b64encode(bytes(vals)).decode()
+
+
+def _post_voice_message(token: str, channel_id: int, ogg: bytes, text: str) -> None:
+    """Send Ogg/Opus audio as a real voice message (flag IS_VOICE_MESSAGE = 1 << 13)."""
+    payload = {"flags": 1 << 13, "attachments": [{
+        "id": 0, "filename": "voice-message.ogg",
+        "duration_secs": round(_ogg_duration(ogg), 2), "waveform": _waveform(text)}]}
+    r = httpx.post(f"https://discord.com/api/v10/channels/{channel_id}/messages",
+                   headers={"Authorization": f"Bot {token}", "User-Agent": "DiscordBot (fafnir, 1.0)"},
+                   data={"payload_json": json.dumps(payload)},
+                   files={"files[0]": ("voice-message.ogg", ogg, "audio/ogg")}, timeout=60)
+    if r.status_code >= 400:
+        raise RuntimeError(f"Discord said {r.status_code}: {r.text[:200]}")
 
 
 def make_bridge(engine, notices, on_status, name: str):

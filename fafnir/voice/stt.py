@@ -32,7 +32,7 @@ class DeepgramSTT:
             headers={"Authorization": f"Token {api_key}"}, timeout=30.0
         )
 
-    def transcribe(self, wav_bytes: bytes) -> str:
+    def transcribe(self, wav_bytes: bytes, content_type: str = "audio/wav") -> str:
         """Give me audio, get back text ("" if nothing was said)."""
         for attempt in (1, 2):  # one retry: home connections drop the odd request
             try:
@@ -40,7 +40,7 @@ class DeepgramSTT:
                     DEEPGRAM_URL,
                     params=self.params,
                     content=wav_bytes,
-                    headers={"Content-Type": "audio/wav"},
+                    headers={"Content-Type": content_type},
                 )
                 break
             except httpx.TimeoutException:

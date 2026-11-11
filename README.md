@@ -29,7 +29,7 @@ Fafnir DMs you on Discord and you can DM it back from anywhere (the PC must be o
 2. **OAuth2 → URL Generator**: tick `bot`, open the generated link, and add the bot to a small private server of your own (Discord only lets bots DM people they share a server with).
 3. Restart the app; it shows `DM the bot ... /pair 123456`. Send exactly that to the bot in a DM. Only your account can use it from then on.
 
-Risky actions you ask for from the phone come with Yes / No buttons. Important notices are DMed to you (`send` under `[phone]` in `config.toml`). `/pause` and `/resume` control notices.
+**Voice notes:** send Fafnir a voice note and it answers with a spoken voice note (Deepgram listens, ElevenLabs speaks); send text and it answers in text. Risky actions you ask for from the phone come with Yes / No buttons. Important notices are DMed to you (`send` under `[phone]` in `config.toml`). `/pause` and `/resume` control notices.
 
 ## Your phone (WhatsApp) — waiting on Meta business verification
 
