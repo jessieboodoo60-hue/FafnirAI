@@ -22,14 +22,11 @@ Opens Fafnir fullscreen on your right-hand monitor (change `screen` under `[app]
 
 To stop it starting with Windows: `.venv\Scripts\python main.py --remove-startup` (and `--install-startup` to turn it back on). If the app misbehaves, errors are in `logs\app.log`.
 
-## Your phone (Telegram)
+## Your phone (WhatsApp)
 
-Fafnir can message you on Telegram and you can message it back from anywhere (the PC must be on with the app running).
-1. In Telegram, open **@BotFather**, send `/newbot`, pick a name and a username ending in `bot`, and copy the token it gives you.
-2. Add it to `.env`: `TELEGRAM_BOT_TOKEN=...` and restart the app.
-3. The app shows a line like `send /pair 123456 to @yourbot`; send exactly that to your bot. Only your Telegram account can use it from then on.
+Fafnir can message you on WhatsApp and you can message it back from anywhere (the PC must be on with the app running). It uses Meta's official WhatsApp Business Cloud API, so Fafnir writes from its own number (Meta's free test number), not yours. Setup steps are in the chat where this was built; in short: a Meta developer app with WhatsApp, a permanent system-user token, your number added as a test recipient, a free ngrok static domain, and the webhook pointed at `https://<your-domain>/webhook` with the verify token the app shows. Secrets go in `.env` (see `.env.example`), the rest under `[phone]` in `config.toml`.
 
-Then just message it like you'd talk to it. Risky actions you ask for from the phone come with Yes/No buttons. Important notices are pushed to the phone (`[phone]` in `config.toml`: "important", "urgent" or "all"). `/pause` and `/resume` in the chat control notices.
+Message it like you'd talk to it. Risky actions you ask for from the phone come with Yes / No buttons. Important notices are sent to WhatsApp; WhatsApp only allows free-form messages within 24 hours of your last message, so for alerts after that, set `alert_template` to an approved template (otherwise they wait in the Notices panel). `/pause` and `/resume` control notices.
 
 ## Conversations and backups
 

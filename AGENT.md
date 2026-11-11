@@ -100,9 +100,9 @@ Each tier runs and is verified on its own before the next starts.
 - Kill switch: the PAUSE button on the Notices panel, or "don't disturb me (for N minutes)" via `heartbeat_pause`. Tools: `notices_list`, `notices_dismiss`, `heartbeat_pause/resume/status`.
 - Runs inside the desktop app today; it has no UI dependency, so it can move to an always-on host.
 
-## Phone link (Telegram)
-- `fafnir/phone.py`: a private Telegram bot (token `TELEGRAM_BOT_TOKEN`), long-polled from the app, so no inbound ports. Paired once with a 6-digit code shown in the app; only that chat id (`data/phone.json`) is listened to, everyone else is ignored.
-- Phone messages are owner turns through the same Engine (`source="phone"`): answered by text, not spoken at the PC; confirmations for phone requests get Yes/No inline buttons (PC answers still work). Important/urgent notices are pushed once (`pushed` flag), respecting heartbeat pause. `/pause`, `/resume`.
+## Phone link (WhatsApp, owner's choice 2026-11-11; Telegram version dropped)
+- `fafnir/phone.py`: official WhatsApp Business Cloud API (Graph v23.0). Fafnir sends from its own business/test number. Incoming messages arrive at a local webhook (127.0.0.1:8787) exposed by an ngrok static domain that Fafnir starts; every delivery is HMAC-checked with the app secret, and only the owner's number (`WHATSAPP_OWNER_NUMBER`) is acted on.
+- Phone messages are owner turns through the same Engine (`source="phone"`), answered by text; confirmations get Yes/No reply buttons. Important notices are pushed once (skipped if older than 6 h). WhatsApp's 24-hour rule: free text only within 24 h of the owner's last message; outside it, alerts need `alert_template` (an approved Utility template) or they stay in the Notices panel.
 
 ## Desktop app ("a face", built 2026-11-10)
 - `python main.py --app` (`fafnir/ui/`): Qt (PySide6) fullscreen dark HUD. Left: today's calendar and open tasks. Centre: animated core (colour = state, swells with voice loudness). Right: notices (filled by the Tier 5 heartbeat) and recent activity. Bottom: conversation and a type box. Confirmations are Yes/No buttons and can also be answered by voice.

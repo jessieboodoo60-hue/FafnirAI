@@ -44,10 +44,22 @@ fullscreen = true
 talk_key_label = "M5"
 
 [phone]
-# Reach you on your phone through a private Telegram bot (needs TELEGRAM_BOT_TOKEN in .env).
+# Reach you on WhatsApp through the official WhatsApp Business Cloud API (Meta).
+# Secrets go in .env: WHATSAPP_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_APP_SECRET,
+# WHATSAPP_OWNER_NUMBER (your number with country code, digits only).
 enabled = true
-# Which notices to push: "important" (the ones Fafnir says out loud), "urgent", or "all".
+# Which notices to send: "important" (the ones Fafnir says out loud), "urgent", or "all".
 send = "important"
+# Your free ngrok static domain (from dashboard.ngrok.com/domains), e.g. "calm-fox-123.ngrok-free.app".
+# Fafnir starts the tunnel itself so Meta can deliver your messages to this PC.
+ngrok_domain = ""
+start_tunnel = true
+port = 8787
+graph_version = "v23.0"
+# Approved message template for alerts when you haven't messaged Fafnir in 24 hours
+# (WhatsApp's rule). Create a Utility template with one body variable, e.g. "Fafnir: {{1}}".
+alert_template = ""
+template_language = "en_US"
 
 [heartbeat]
 # Background checks that let Fafnir reach out first. Notices appear in the app's Notices
