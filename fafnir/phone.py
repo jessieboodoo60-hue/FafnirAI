@@ -224,11 +224,29 @@ class WhatsAppBridge:
     def _handle(self, data: dict) -> None:
         for entry in data.get("entry", []):
             for change in entry.get("changes", []):
-                for m in change.get("value", {}).get("messages", []) or []:
+                value = change.get("value", {})
+                for st in value.get("statuses", []) or []:
+                    self._handle_status(st)
+                for m in value.get("messages", []) or []:
                     try:
                         self._handle_message(m)
                     except Exception as e:
                         self.on_status(f"WhatsApp message failed: {e}")
+
+    def _handle_status(self, st: dict) -> None:
+        """Meta's delivery reports for messages Fafnir sent: sent / delivered / read / failed."""
+        line = f"{datetime.now():%Y-%m-%d %H:%M:%S} {st.get('status')} to ...{str(st.get('recipient_id', ''))[-4:]}"
+        errors = st.get("errors") or []
+        for e in errors:
+            line += f" | error {e.get('code')}: {e.get('title')} {e.get('error_data', {}).get('details', '')}"
+        try:
+            with open(ROOT / "logs" / "whatsapp.log", "a", encoding="utf-8") as f:
+                f.write(line + "\n")
+        except OSError:
+            pass
+        if st.get("status") == "failed":
+            why = "; ".join(f"{e.get('title')} ({e.get('code')})" for e in errors) or "no reason given"
+            self.on_status(f"WhatsApp couldn't deliver a message: {why}")
 
     def _handle_message(self, m: dict) -> None:
         mid = m.get("id", "")

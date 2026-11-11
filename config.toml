@@ -52,7 +52,7 @@ enabled = true
 send = "important"
 # Your free ngrok static domain (from dashboard.ngrok.com/domains), e.g. "calm-fox-123.ngrok-free.app".
 # Fafnir starts the tunnel itself so Meta can deliver your messages to this PC.
-ngrok_domain = ""
+ngrok_domain = "germless-arrange-plating.ngrok-free.dev"
 start_tunnel = true
 port = 8787
 graph_version = "v23.0"
