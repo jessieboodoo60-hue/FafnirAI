@@ -381,7 +381,7 @@ class MainWindow(QWidget):
         b.sig_confirm.connect(lambda a: self.confirm.ask(a, self.talk_key))
         b.sig_confirm_done.connect(self.on_confirm_done)
         b.sig_panels.connect(self.on_panels)
-        b.sig_info.connect(lambda t: self._append_text(f"📱 {t}", C_DIM))
+        b.sig_info.connect(lambda t: (self._append_text(f"📱 {t}", C_DIM), print(f"[phone] {t}", flush=True)))
         self.input.returnPressed.connect(self.on_enter)
         QShortcut(QKeySequence("Escape"), self, activated=self.engine.interrupt)
         QShortcut(QKeySequence("F11"), self, activated=self.toggle_fullscreen)
