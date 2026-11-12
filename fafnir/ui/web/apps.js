@@ -38,6 +38,7 @@ function md(text) {  // small, safe markdown for the Viewer
 /* ---------- opening apps ---------- */
 function openApp(id, opts = {}) {
   const app = APPS[id]; if (!app) return;
+  if (!SOLO && S.popped.includes(id) && !opts.multi && !opts.path) { call("soloFocus", id); return; }  // it's on another screen
   const isNew = !WM.wins.has(id) || opts.multi;
   const w = WM.open({ id: opts.multi ? id + ":" + Date.now() : id, app: id, title: opts.title || app.name, multi: !!opts.multi,
     ...(SIZES[id] || {}), flush: ["fafnir", "files"].includes(id),
@@ -55,8 +56,8 @@ function refreshOpen(...ids) { ids.forEach((id) => WM.wins.forEach((w) => { if (
 
 /* ---------- the orb (port of the desktop app's animated core) ---------- */
 const Orb = {
-  canvas: null, raf: 0, level: 0, color: [63, 208, 255], angle: 0, last: 0,
-  COLORS: { idle: [63, 208, 255], listening: [61, 255, 168], thinking: [255, 179, 71], speaking: [150, 140, 255], confirming: [255, 95, 109] },
+  canvas: null, raf: 0, level: 0, color: [176, 196, 232], angle: 0, last: 0,
+  COLORS: { idle: [176, 196, 232], listening: [110, 205, 150], thinking: [228, 178, 104], speaking: [130, 168, 245], confirming: [232, 104, 100] },
   start(canvas) { this.canvas = canvas; if (!this.raf) this.raf = requestAnimationFrame((t) => this.frame(t)); },
   stop() { cancelAnimationFrame(this.raf); this.raf = 0; this.canvas = null; },
   frame(now) {
@@ -103,7 +104,7 @@ const Chat = {
 function renderLog(w) {
   const log = w.body.querySelector(".fa-log"); if (!log) return;
   const nearBottom = log.scrollHeight - log.scrollTop - log.clientHeight < 80;
-  log.innerHTML = Chat.msgs.map((m) => `<div class="msg ${m.role} ${m.old ? "old" : ""}"><div class="who">${m.role === "me" ? (m.spoken ? "You · spoken" : "You") + " · " + m.time : m.role === "ai" ? esc(S.name) + " · " + m.time : m.time}</div>
+  log.innerHTML = Chat.msgs.map((m) => `<div class="msg ${m.role} ${m.old ? "old" : ""}"><div class="who">${m.role === "me" ? (m.spoken ? "You, spoken" : "You") + " · " + m.time : m.role === "ai" ? "<b>" + esc(S.name) + "</b> · " + m.time : m.time}</div>
     <div class="body">${esc(m.text)}</div>${m.tools.map((t) => `<div class="tool ${t.error ? "err" : ""}">${t.error ? "✗" : t.web ? "◌" : "✓"} ${esc(t.name.replace(/_/g, " "))}${t.detail ? " · " + esc(t.detail) : ""}</div>`).join("")}</div>`).join("");
   if (nearBottom) log.scrollTop = log.scrollHeight;
 }
@@ -208,8 +209,8 @@ const RENDER = {
     }
     const C = w.state.cfg, v = C.values || {};
     const wp = store.get("wallpaper", "") || "aurora";
-    const sw = [["aurora", "linear-gradient(135deg,#1b3a8f,#5b3cc4,#0aa5a0)"], ["dusk", "linear-gradient(135deg,#3a1450,#ff5f9e,#ff9a5c)"],
-                ["ocean", "linear-gradient(135deg,#04324a,#00b5a6,#021220)"], ["graphite", "linear-gradient(135deg,#1b1f27,#3a3f4a,#0a0c10)"]];
+    const sw = [["aurora", "linear-gradient(180deg,#39405a,#8a6f78 55%,#d49a76 75%,#262a3b 76%)", "Dusk"], ["dusk", "linear-gradient(180deg,#0b0f1c,#253152 60%,#3d4a6e 75%,#141a30 76%)", "Night"],
+                ["ocean", "linear-gradient(180deg,#43514e,#7d8b83 55%,#b6b9a6 75%,#333d3a 76%)", "Mist"], ["graphite", "linear-gradient(180deg,#1b1c20,#2a2b30)", "Graphite"]];
     const note = (k) => ({ restart: "after restart", conversation: "after a restart or /reset" }[C.when?.[k]] || "");
     const seg = (k, opts) => `<div class="seg" data-k="${k}">${opts.map(([val, label]) => `<button class="${v[k] === val ? "on" : ""}" data-v='${JSON.stringify(val)}'>${esc(label)}</button>`).join("")}</div>`;
     const sw_ = (k) => `<button class="switch ${v[k] ? "on" : ""}" data-k="${k}"></button>`;
@@ -227,7 +228,7 @@ const RENDER = {
         ${row("Beeps when listening starts and stops", sw_("voice.cue_sounds"))}
         ${row("Talk key", `<span class="k">Hold ${esc(S.talkKey)}</span>`)}</div>
       <div class="sec">Screen</div><div class="set-group">
-        ${row("Wallpaper", `<div class="swatches">${sw.map(([k, g]) => `<button class="swatch ${wp === k ? "on" : ""}" data-wp="${k}" style="background:${g}" title="${k}"></button>`).join("")}</div>`)}
+        ${row("Wallpaper", `<div class="swatches">${sw.map(([k, g, n]) => `<button class="swatch ${wp === k ? "on" : ""}" data-wp="${k}" style="background:${g}" title="${n}"></button>`).join("")}</div>`)}
         ${row("Your own picture", `<input class="field set-text" data-k="app.background" placeholder="C:/Users/you/Pictures/wall.jpg" value="${esc(v["app.background"] || "")}" style="max-width:320px">`)}
         ${row("Monitor", seg("app.screen", [["right", "Right"], ["left", "Left"], ["above", "Above"], ["primary", "Main"]]), "app.screen")}</div>
       <div class="sec">Notifications</div><div class="set-group">${row("Pause notices (do not disturb)", `<button class="switch ${S.paused ? "on" : ""}" id="set-dnd"></button>`)}</div>
@@ -317,7 +318,7 @@ const Files = {
 function showViewer(p) {
   const id = "viewer:" + (p.title || "On screen");
   const existing = WM.wins.get(id); if (existing) WM.close(existing);
-  return WM.open({ id, app: "viewer", title: p.title || "On screen", multi: false, w: p.kind === "cards" ? 860 : 760, h: 560,
+  return WM.open({ id, app: "viewer", title: p.title || "On screen", multi: false, w: p.kind === "cards" ? 860 : 760, h: 560, payload: p,
     render: (w) => { w.body.innerHTML = `<div class="h">${esc(p.title || "")}</div>${p.subtitle ? `<div class="sub">${esc(p.subtitle)}</div>` : `<div class="sub"></div>`}<div class="vbody"></div>`;
       const b = w.body.querySelector(".vbody"), items = p.items || [], tagc = (t) => (t === "urgent" ? "urgent" : t === "important" ? "important" : t === "good" ? "good" : "");
       if (p.kind === "text") b.innerHTML = `<div class="md">${md(p.text || "")}</div>`;
@@ -328,7 +329,16 @@ function showViewer(p) {
 
 /* ---------- glue called from desktop.js ---------- */
 const Apps = {
-  init() { Chat.restore(S.conversation); if (!WM.wins.has("fafnir")) openApp("fafnir"); else Chat.render(); Dock.sync(); },
+  init() {
+    Chat.restore(S.conversation);
+    if (SOLO) {  // a popped-out window: just this one app, filling the real window
+      if (!WM.wins.size) SOLO === "viewer" ? showViewer(SOLO_ARGS.viewer || {}) : openApp(SOLO, SOLO_ARGS.path ? { path: SOLO_ARGS.path } : {});
+      else Chat.render();
+      return;
+    }
+    if (!WM.wins.has("fafnir") && !S.popped.includes("fafnir")) openApp("fafnir"); else Chat.render();
+    Dock.sync();
+  },
   state() { WM.wins.forEach((w) => { if (w.app === "fafnir") RENDER.fafnirState(w); }); },
   data() { refreshOpen("mail", "calendar", "tasks", "business"); },
   notices() { refreshOpen("notices"); },

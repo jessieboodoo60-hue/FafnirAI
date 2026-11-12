@@ -9,6 +9,12 @@ const h = (html) => { const t = document.createElement("template"); t.innerHTML 
 const store = { get(k, d) { try { const v = localStorage.getItem("fafnir." + k); return v == null ? d : JSON.parse(v); } catch { return d; } },
                 set(k, v) { try { localStorage.setItem("fafnir." + k, JSON.stringify(v)); } catch {} } };
 
+/* A page is either the main desktop or one app popped out onto another screen ("solo"). */
+const QS = new URLSearchParams(location.search);
+const SOLO = QS.get("solo") || "";
+const PAGE = SOLO ? QS.get("id") || "solo" : "main";
+const SOLO_ARGS = (() => { try { return JSON.parse(QS.get("args") || "{}"); } catch { return {}; } })();
+
 /* ---------------- spring physics ---------------- */
 function spring({ from, to, stiffness = 260, damping = 24, mass = 1, onUpdate, onDone }) {
   let x = from, v = 0, last = performance.now(), stopped = false;
@@ -28,21 +34,21 @@ function spring({ from, to, stiffness = 260, damping = 24, mass = 1, onUpdate, o
 const S = {
   name: "Fafnir", talkKey: "M5", home: "C:\\Users", voice: false, wake: "",
   data: {}, notices: [], paused: false, briefing: "", nowItems: [],
-  conversation: [], activity: [], state: "idle", level: 0, status: "Ready",
+  conversation: [], activity: [], state: "idle", level: 0, status: "Ready", popped: [],
 };
 let bridge = null;
 const pending = {};  // request id -> callback
 let reqN = 0;
 function call(method, ...args) { if (bridge && bridge[method]) bridge[method](...args); else console.log("[no bridge]", method, args); }
 function request(method, ...args) {
-  return new Promise((resolve) => { const id = "r" + (++reqN); pending[id] = resolve; call(method, ...args, id);
+  return new Promise((resolve) => { const id = PAGE + ".r" + (++reqN); pending[id] = resolve; call(method, ...args, id);
     if (!bridge) setTimeout(() => resolve({ ok: false, error: "Not connected to Fafnir." }), 50); });
 }
 
 /* ---------------- window manager ---------------- */
 const WM = {
   wins: new Map(), z: 100, focused: null,
-  area() { return { top: 48, left: 8, right: innerWidth - 8, bottom: innerHeight - 96 }; },
+  area() { return SOLO ? { top: 0, left: 0, right: innerWidth, bottom: innerHeight } : { top: 40, left: 8, right: innerWidth - 8, bottom: innerHeight - 84 }; },
 
   open(opts) {
     // one window per app unless `multi`; bring an existing one forward
@@ -58,24 +64,30 @@ const WM = {
       ${["n","s","e","w","ne","nw","se","sw"].map((d) => `<div class="resize r-${d}" data-dir="${d}"></div>`).join("")}</section>`);
     const w = { id: opts.id, app: opts.app, title: opts.title, el, body: $(".win-body", el), minimized: false, maximized: false,
                 x: clamp(x, a.left, a.right - 200), y: clamp(y, a.top, a.bottom - 120), w: saved ? saved.w : width, h: saved ? saved.h : height, opts };
+    if (SOLO) Object.assign(w, { x: 0, y: 0, w: innerWidth, h: innerHeight });
     this.place(w);
     $("#windows").appendChild(el);
     this.wins.set(w.id, w);
-    $(".l-close", el).onclick = (e) => { e.stopPropagation(); this.close(w); };
-    $(".l-min", el).onclick = (e) => { e.stopPropagation(); this.minimize(w); };
-    $(".l-max", el).onclick = (e) => { e.stopPropagation(); this.toggleMax(w); };
+    const solo = (action, arg = 0) => call("soloAction", PAGE, action, arg);
+    $(".l-close", el).onclick = (e) => { e.stopPropagation(); SOLO ? solo("close") : this.close(w); };
+    $(".l-min", el).onclick = (e) => { e.stopPropagation(); SOLO ? solo("minimize") : this.minimize(w); };
+    $(".l-max", el).onclick = (e) => { e.stopPropagation(); SOLO ? solo("maximize") : this.toggleMax(w); };
     el.addEventListener("pointerdown", () => this.focus(w), true);
     this.dragging($(".titlebar", el), w);
     $$(".resize", el).forEach((r) => this.resizing(r, w));
-    $(".titlebar", el).addEventListener("dblclick", () => this.toggleMax(w));
+    $(".titlebar", el).addEventListener("dblclick", () => (SOLO ? solo("maximize") : this.toggleMax(w)));
     $(".titlebar", el).addEventListener("contextmenu", (e) => { e.preventDefault();
-      Menu.show(e.clientX, e.clientY, [{ label: "Minimize", k: "Ctrl+M", fn: () => this.minimize(w) }, { label: w.maximized ? "Restore size" : "Zoom", fn: () => this.toggleMax(w) },
-        { sep: true }, { label: "Close window", k: "Ctrl+W", fn: () => this.close(w) }]); });
+      Menu.show(e.clientX, e.clientY, SOLO
+        ? [{ label: `Move back to ${S.name}'s screen`, fn: () => solo("dock") }, { sep: true }, { label: "Close window", k: "Ctrl+W", fn: () => solo("close") }]
+        : [{ label: "Minimize", k: "Ctrl+M", fn: () => this.minimize(w) }, { label: w.maximized ? "Restore size" : "Zoom", fn: () => this.toggleMax(w) },
+           { label: "Move to another screen", fn: () => this.popOut(w, { screen: "next" }) },
+           { sep: true }, { label: "Close window", k: "Ctrl+W", fn: () => this.close(w) }]); });
     opts.render && opts.render(w);
     this.focus(w);
+    if (SOLO) { addEventListener("resize", () => { Object.assign(w, { w: innerWidth, h: innerHeight }); this.place(w); w.opts.onResize && w.opts.onResize(w); }); Dock.sync(); return w; }
     // open animation: spring scale + fade
     el.style.opacity = 0;
-    spring({ from: 0, to: 1, stiffness: 320, damping: 26, onUpdate: (p) => { el.style.opacity = Math.min(1, p * 1.4); el.style.transform = `scale(${0.9 + 0.1 * p}) translateY(${(1 - p) * 14}px)`; },
+    spring({ from: 0, to: 1, stiffness: 360, damping: 30, onUpdate: (p) => { el.style.opacity = Math.min(1, p * 1.5); el.style.transform = `scale(${0.96 + 0.04 * p}) translateY(${(1 - p) * 8}px)`; },
              onDone: () => { el.style.transform = ""; } });
     Dock.sync();
     return w;
@@ -124,17 +136,29 @@ const WM = {
   dragging(handle, w) {
     handle.addEventListener("pointerdown", (e) => {
       if (e.button !== 0 || e.target.closest(".lights")) return;
+      if (SOLO) { call("soloAction", PAGE, "move", 0); return; }
       handle.setPointerCapture(e.pointerId);
-      const sx = e.clientX, sy = e.clientY, ox = w.x, oy = w.y, a = this.area();
-      if (w.maximized) { w.maximized = false; w.el.classList.remove("maximized"); Object.assign(w, { w: w.prev.w, h: w.prev.h }); }
-      const move = (ev) => { w.x = clamp(ox + ev.clientX - sx, a.left - w.w + 120, a.right - 120); w.y = clamp(oy + ev.clientY - sy, a.top, a.bottom - 40); this.place(w); };
-      const up = () => { handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); this.save(w); };
+      const sx = e.clientX, sy = e.clientY, a = this.area();
+      if (w.maximized) { w.maximized = false; w.el.classList.remove("maximized"); Object.assign(w, { w: w.prev.w, h: w.prev.h, x: clamp(sx - w.prev.w / 2, a.left, a.right - w.prev.w) }); this.place(w); }
+      const ox = w.x, oy = w.y, gx = sx - ox, gy = sy - oy;
+      const hintL = edgeHint("left"), hintR = edgeHint("right");
+      const done = () => { handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); hintL.classList.remove("show"); hintR.classList.remove("show"); };
+      const move = (ev) => {
+        // dragged off the edge of this screen: carry on as a real window on the next one
+        if (ev.clientX < 0 || ev.clientX >= innerWidth || ev.clientY >= innerHeight) {
+          done(); try { handle.releasePointerCapture(e.pointerId); } catch {}
+          this.popOut(w, { drag: true, grabX: gx, grabY: gy }); return; }
+        hintL.classList.toggle("show", ev.clientX < 14); hintR.classList.toggle("show", ev.clientX > innerWidth - 14);
+        w.x = clamp(ox + ev.clientX - sx, a.left - w.w + 120, a.right - 120); w.y = clamp(oy + ev.clientY - sy, a.top, a.bottom - 40); this.place(w); };
+      const up = () => { done(); this.save(w); };
       handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", up);
     });
   },
   resizing(handle, w) {
     handle.addEventListener("pointerdown", (e) => {
-      e.stopPropagation(); handle.setPointerCapture(e.pointerId);
+      e.stopPropagation();
+      if (SOLO) { const d = handle.dataset.dir; call("soloAction", PAGE, "resize", (d.includes("n") ? 1 : 0) | (d.includes("w") ? 2 : 0) | (d.includes("e") ? 4 : 0) | (d.includes("s") ? 8 : 0)); return; }
+      handle.setPointerCapture(e.pointerId);
       const d = handle.dataset.dir, sx = e.clientX, sy = e.clientY, o = { x: w.x, y: w.y, w: w.w, h: w.h }, minW = 320, minH = 220;
       const move = (ev) => { const dx = ev.clientX - sx, dy = ev.clientY - sy;
         if (d.includes("e")) w.w = Math.max(minW, o.w + dx);
@@ -145,6 +169,14 @@ const WM = {
       const up = () => { handle.removeEventListener("pointermove", move); handle.removeEventListener("pointerup", up); w.maximized = false; this.save(w); };
       handle.addEventListener("pointermove", move); handle.addEventListener("pointerup", up);
     });
+  },
+  popOut(w, how = {}) {
+    // hand this window to Python, which opens it as a real window that can sit on any screen
+    const args = { path: w.state && w.state.path, viewer: w.opts.payload };
+    call("popOut", w.app, JSON.stringify({ w: Math.round(w.w), h: Math.round(w.h), args, ...how }));
+    w.el.remove(); this.wins.delete(w.id); w.opts.onClose && w.opts.onClose(w);
+    if (this.focused === w) { this.focused = null; $("#mb-app").textContent = S.name; }
+    Dock.sync();
   },
   tile(ids) {
     const list = (ids ? ids.map((i) => this.wins.get(i)).filter(Boolean) : [...this.wins.values()]).filter((w) => !w.minimized);
@@ -158,6 +190,7 @@ const WM = {
   },
 };
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
+function edgeHint(side) { let el = $(".edge-hint." + side); if (!el) { el = h(`<div class="edge-hint ${side}"></div>`); document.body.appendChild(el); } return el; }
 
 /* ---------------- dock ---------------- */
 const Dock = {
@@ -177,14 +210,14 @@ const Dock = {
     // hover magnification: icons near the pointer grow (smoothed by a spring per icon)
     const scales = this.items.map(() => 1), targets = this.items.map(() => 1);
     const anim = () => { let busy = false; this.items.forEach((el, i) => { const d = targets[i] - scales[i]; if (Math.abs(d) > 0.002) { scales[i] += d * 0.28; busy = true; } else scales[i] = targets[i];
-        el.style.transform = `scale(${scales[i]})`; el.style.margin = `0 ${(scales[i] - 1) * 18}px`; }); if (busy) requestAnimationFrame(anim); else this.animating = false; };
+        el.style.transform = `scale(${scales[i]})`; el.style.margin = `0 ${(scales[i] - 1) * 16}px`; }); if (busy) requestAnimationFrame(anim); else this.animating = false; };
     const kick = () => { if (!this.animating) { this.animating = true; requestAnimationFrame(anim); } };
     dock.addEventListener("mousemove", (e) => { this.items.forEach((el, i) => { const r = el.getBoundingClientRect(), c = r.left + r.width / 2, dist = Math.abs(e.clientX - c);
-        targets[i] = 1 + 0.55 * Math.max(0, Math.cos(Math.min(dist / 160, 1) * Math.PI / 2)); }); kick(); });
+        targets[i] = 1 + 0.42 * Math.max(0, Math.cos(Math.min(dist / 150, 1) * Math.PI / 2)); }); kick(); });
     dock.addEventListener("mouseleave", () => { targets.fill(1); kick(); });
   },
   itemFor(app) { return $(`.dock-item[data-app="${app}"]`) || $(`.dock-item[data-app="viewer"]`); },
-  sync() { this.items.forEach((el) => el.classList.toggle("running", [...WM.wins.values()].some((w) => w.app === el.dataset.app))); },
+  sync() { this.items.forEach((el) => el.classList.toggle("running", [...WM.wins.values()].some((w) => w.app === el.dataset.app) || S.popped.includes(el.dataset.app))); },
   bounce(app) { const el = this.itemFor(app); if (!el) return; el.classList.remove("bounce"); void el.offsetWidth; el.classList.add("bounce"); setTimeout(() => el.classList.remove("bounce"), 1900); },
 };
 
@@ -221,6 +254,7 @@ function menubarMenus() {
            { label: "Open Downloads", fn: () => openApp("files", { path: S.home + "\\Downloads" }) }, { sep: true },
            { label: "Close window", k: "Ctrl+W", disabled: !focused, fn: () => focused && WM.close(focused) }],
     window: [{ label: "Minimize", k: "Ctrl+M", disabled: !focused, fn: () => focused && WM.minimize(focused) }, { label: "Zoom", disabled: !focused, fn: () => focused && WM.toggleMax(focused) },
+             { label: "Move to another screen", disabled: !focused, fn: () => focused && WM.popOut(focused, { screen: "next" }) },
              { label: "Tile all windows", fn: () => WM.tile() }, { sep: true },
              ...[...WM.wins.values()].map((w) => ({ label: (w === focused ? "• " : "  ") + w.title, fn: () => (w.minimized ? WM.restore(w) : WM.focus(w)) })),
              { sep: true }, { label: "Close all", fn: () => [...WM.wins.values()].forEach((w) => WM.close(w)) }],
@@ -243,7 +277,7 @@ const Search = {
     this.sections.Apps = Object.entries(APPS).filter(([id, a]) => id !== "viewer" && (a.name.toLowerCase().includes(ql) || (a.keywords || "").includes(ql)))
       .map(([id, a]) => ({ title: a.name, subtitle: "App", icon: a.icon, run: () => openApp(id) }));
     this.sections[`Ask ${S.name}`] = [{ title: q.trim(), subtitle: `Ask ${S.name} this`, icon: "fafnir", run: () => { openApp("fafnir"); call("submitText", q.trim()); } }];
-    this.req = "s" + (++reqN); this.render(); if (q.trim().length >= 2) call("search", q.trim(), this.req);
+    this.req = PAGE + ".s" + (++reqN); this.render(); if (q.trim().length >= 2) call("search", q.trim(), this.req);
   },
   add(section, items) {
     this.sections[section] = items.map((it) => ({ ...it, icon: section === "Files" ? (looksLikeFolder(it.path) ? "folder" : fileIcon(it.path)) : section === "Memory" ? "fafnir" : section === "Business" ? "business" : "file",
@@ -408,12 +442,16 @@ function renderNow() {
 /* ---------------- messages from Python ---------------- */
 function onEvent(raw) {
   const m = typeof raw === "string" ? JSON.parse(raw) : raw;
+  if (m.to && m.to !== PAGE) return;
+  if (SOLO && ["banner", "briefing", "screen", "confirm", "popped"].includes(m.type)) return;
   switch (m.type) {
     case "init":
       Object.assign(S, { name: m.name, talkKey: m.talkKey, voice: m.voice, wake: m.wake, home: m.home, conversation: m.conversation || [], activity: m.activity || [] });
       document.title = m.name; $("#mb-app").textContent = m.name;
       if (m.wallpaper && !store.get("wallpaper", "")) setWallpaper("image", m.wallpaper);
-      buildDesktopIcons(); Apps.init(); break;
+      if (!SOLO) buildDesktopIcons();
+      Apps.init(); break;
+    case "popped": S.popped = m.apps || []; Dock.sync(); break;
     case "tick":
       if (m.state !== S.state) { S.state = m.state; $("#mb-status").dataset.state = m.state; $("#mb-status-text").textContent = m.status; Apps.state(); }
       S.level = m.level; break;
@@ -446,10 +484,12 @@ function setWallpaper(kind, url) {
 
 /* ---------------- start ---------------- */
 function start() {
-  buildMenubar(); Dock.build(); buildDesktopIcons(); renderNow();
+  if (SOLO) document.body.classList.add("solo");
+  else { buildMenubar(); Dock.build(); buildDesktopIcons(); renderNow(); }
   const wp = store.get("wallpaper", ""); if (wp) setWallpaper(wp);
   if (window.qt && window.QWebChannel) {
-    new QWebChannel(qt.webChannelTransport, (ch) => { bridge = ch.objects.fafnir; bridge.event.connect(onEvent); bridge.ready(); });
+    new QWebChannel(qt.webChannelTransport, (ch) => { bridge = ch.objects.fafnir; bridge.event.connect(onEvent);
+      SOLO ? bridge.soloReady(PAGE) : bridge.ready(); });
   } else {
     // opened in a normal browser (design preview): show sample content
     onEvent({ type: "init", name: "Fafnir", talkKey: "M5", voice: true, wake: "Fafnir", home: "C:\\Users\\you", conversation: [] });

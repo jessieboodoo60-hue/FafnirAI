@@ -154,6 +154,44 @@ class DesktopBridge(QObject):
     def restartApp(self) -> None:
         self.w.restart()
 
+    # ---- windows on other screens ------------------------------------------------------
+    @Slot(str, str)
+    def popOut(self, app: str, opts_json: str) -> None:
+        try:
+            self.w.pop_out(app, json.loads(opts_json or "{}"))
+        except Exception as e:
+            self.emit("error", text=f"Couldn't move that window: {e}")
+
+    @Slot(str)
+    def soloReady(self, page: str) -> None:
+        self.w.send_state(page)
+
+    @Slot(str, str, int)
+    def soloAction(self, page: str, action: str, arg: int) -> None:
+        pop = self.w.pops.get(page)
+        if pop is None:
+            return
+        if action == "dock":   # back onto Fafnir's own screen
+            app, args = pop.app, pop.args
+            pop.close()
+            self.emit("screen", to="main", action="open", payload={"app": app, "path": args.get("path")}
+                      if app != "viewer" else {})
+            if app == "viewer" and args.get("viewer"):
+                self.emit("screen", to="main", action="show", payload=args["viewer"])
+            self.w.activateWindow()
+        else:
+            pop.action(action, arg)
+
+    @Slot(str)
+    def soloFocus(self, app: str) -> None:
+        for pop in self.w.pops.values():
+            if pop.app == app:
+                if pop.isMinimized():
+                    pop.showNormal()
+                pop.raise_()
+                pop.activateWindow()
+                return
+
     # ---- files ---------------------------------------------------------------------------
     @Slot(str, str)
     def listFolder(self, path: str, req: str) -> None:
@@ -312,6 +350,7 @@ class DesktopWindow(QWebEngineView):
         self.setPage(QWebEnginePage(self.profile, self))
         self.restart_needed = False
         self.restart_hook = None       # set by run_app: stops everything and relaunches
+        self.pops: dict = {}           # page id -> PopOut (apps moved onto other screens)
         self.bridge = DesktopBridge(self)
         self.channel = QWebChannel(self)
         self.channel.registerObject("fafnir", self.bridge)
@@ -333,16 +372,19 @@ class DesktopWindow(QWebEngineView):
         self.load(QUrl.fromLocalFile(str(WEB / "index.html")))
 
     # ---- page lifecycle -------------------------------------------------------------------
-    def page_ready(self) -> None:
-        self._ready = True
+    def _init_payload(self) -> dict:
         from ..tools import CONVERSATIONS
         bg = str(self.app_cfg.get("background", "")).strip()
-        self.bridge.emit("init", name=self.cfg.assistant.name, model=self.cfg.model.name,
-                         talkKey=self.app_cfg.get("talk_key_label", "M5"),
-                         voice=self.engine.voice, wake=self.engine.wake.name if self.engine.wake else "",
-                         wallpaper=QUrl.fromLocalFile(os.path.expanduser(bg)).toString() if bg else "",
-                         home=os.path.expanduser("~"), conversation=CONVERSATIONS.today()[-40:],
-                         activity=self._recent_activity())
+        return dict(name=self.cfg.assistant.name, model=self.cfg.model.name,
+                    talkKey=self.app_cfg.get("talk_key_label", "M5"),
+                    voice=self.engine.voice, wake=self.engine.wake.name if self.engine.wake else "",
+                    wallpaper=QUrl.fromLocalFile(os.path.expanduser(bg)).toString() if bg else "",
+                    home=os.path.expanduser("~"), conversation=CONVERSATIONS.today()[-40:],
+                    activity=self._recent_activity())
+
+    def page_ready(self) -> None:
+        self._ready = True
+        self.bridge.emit("init", to="main", **self._init_payload())
         if not self.engine.voice:
             missing = self.cfg.voice.missing_keys()
             self.bridge.emit("caption", text=("Voice is off: add " + ", ".join(missing) + " to .env.") if missing
@@ -485,6 +527,33 @@ class DesktopWindow(QWebEngineView):
         self.bridge.emit("screen", action=action, payload=payload)
 
     # ---- window --------------------------------------------------------------------------------
+    # ---- windows on other screens ------------------------------------------------------------
+    def pop_out(self, app: str, opts: dict) -> None:
+        from .popout import PopOut, place
+        pop = PopOut(self, app, opts.get("args") or {}, WEB / "index.html")
+        pop.args = opts.get("args") or {}
+        self.pops[pop.pid] = pop
+        place(self, pop, opts)
+        self._send_popped()
+
+    def send_state(self, page: str) -> None:
+        """Everything a popped-out window needs to draw its app."""
+        self.bridge.emit("init", to=page, **self._init_payload())
+        if self._data:
+            self.bridge.emit("data", to=page, **self._data)
+        items = self.notices.active() if self.notices is not None else []
+        self.bridge.emit("notices", to=page, paused=bool(self.heartbeat and self.heartbeat.paused),
+                         enabled=self.heartbeat is not None,
+                         items=[{"id": n.id, "title": n.title, "detail": n.detail, "urgency": n.urgency,
+                                 "time": n.created[11:16], "check": n.check} for n in items])
+
+    def pop_closed(self, pop) -> None:
+        self.pops.pop(pop.pid, None)
+        self._send_popped()
+
+    def _send_popped(self) -> None:
+        self.bridge.emit("popped", to="main", apps=sorted({p.app for p in self.pops.values()}))
+
     def toggle_fullscreen(self) -> None:
         self.showNormal() if self.isFullScreen() else self.showFullScreen()
 
@@ -516,6 +585,8 @@ class DesktopWindow(QWebEngineView):
             self.restart_hook()
 
     def closeEvent(self, event) -> None:
+        for pop in list(self.pops.values()):
+            pop.close()
         SCREEN.attach(None)
         self.engine.stop()
         super().closeEvent(event)

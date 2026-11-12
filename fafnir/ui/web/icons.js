@@ -2,20 +2,19 @@
 (function () {
   const tile = (id, c1, c2, glyph) => `<svg viewBox="0 0 64 64"><defs>
     <linearGradient id="g${id}" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="${c1}"/><stop offset="1" stop-color="${c2}"/></linearGradient>
-    <linearGradient id="s${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".45"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
+    <linearGradient id="s${id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".2"/><stop offset=".5" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
     <rect x="3" y="3" width="58" height="58" rx="15" fill="url(#g${id})"/>
     <rect x="3" y="3" width="58" height="58" rx="15" fill="url(#s${id})"/>
-    <rect x="3.5" y="3.5" width="57" height="57" rx="14.5" fill="none" stroke="#fff" stroke-opacity=".35"/>
+    <rect x="3.5" y="3.5" width="57" height="57" rx="14.5" fill="none" stroke="#fff" stroke-opacity=".16"/>
     <g fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round">${glyph}</g></svg>`;
 
   const line = (d, extra = "") => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ${extra}>${d}</svg>`;
 
   window.ICONS = {
-    fafnir: `<svg viewBox="0 0 64 64"><defs><radialGradient id="fo" cx=".5" cy=".42" r=".6"><stop offset="0" stop-color="#fff"/><stop offset=".25" stop-color="#9ff0ff"/><stop offset=".6" stop-color="#3a7bff"/><stop offset="1" stop-color="#1b1f5c"/></radialGradient>
-      <linearGradient id="fs" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff" stop-opacity=".5"/><stop offset=".55" stop-color="#fff" stop-opacity="0"/></linearGradient></defs>
-      <rect x="3" y="3" width="58" height="58" rx="15" fill="#0b1236"/><circle cx="32" cy="32" r="21" fill="url(#fo)"/>
-      <circle cx="32" cy="32" r="25" fill="none" stroke="#7fe6ff" stroke-opacity=".55" stroke-width="1.5" stroke-dasharray="26 10"/>
-      <rect x="3" y="3" width="58" height="58" rx="15" fill="url(#fs)"/><rect x="3.5" y="3.5" width="57" height="57" rx="14.5" fill="none" stroke="#fff" stroke-opacity=".3"/></svg>`,
+    fafnir: `<svg viewBox="0 0 64 64"><defs><radialGradient id="fo" cx=".42" cy=".38" r=".7"><stop offset="0" stop-color="#f3f5fa"/><stop offset=".55" stop-color="#b9c4dc"/><stop offset="1" stop-color="#6b7896"/></radialGradient>
+      <linearGradient id="fb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3a3e4a"/><stop offset="1" stop-color="#23262e"/></linearGradient></defs>
+      <rect x="3" y="3" width="58" height="58" rx="14" fill="url(#fb)"/><circle cx="32" cy="32" r="19.5" fill="none" stroke="#c9d1e4" stroke-opacity=".28" stroke-width="1.4"/>
+      <circle cx="32" cy="32" r="12.5" fill="url(#fo)"/><rect x="3.5" y="3.5" width="57" height="57" rx="13.5" fill="none" stroke="#fff" stroke-opacity=".1"/></svg>`,
     mail: tile("m", "#4fb0ff", "#2457e6", `<rect x="15" y="20" width="34" height="24" rx="4"/><path d="M16 22l16 12 16-12"/>`),
     calendar: tile("c", "#ff8a7a", "#e8455f", `<rect x="16" y="18" width="32" height="30" rx="5"/><path d="M16 27h32M24 14v8M40 14v8"/><circle cx="26" cy="36" r=".6"/><circle cx="32" cy="36" r=".6"/><circle cx="38" cy="36" r=".6"/>`),
     tasks: tile("t", "#5ee0a0", "#16a36a", `<path d="M20 23l4 4 7-7M20 39l4 4 7-7M37 25h9M37 41h9"/>`),
@@ -45,7 +44,7 @@
     search_s: line(`<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>`),
     control_s: line(`<rect x="3" y="5" width="18" height="5" rx="2.5"/><circle cx="8" cy="7.5" r="1.3" fill="currentColor"/><rect x="3" y="14" width="18" height="5" rx="2.5"/><circle cx="16" cy="16.5" r="1.3" fill="currentColor"/>`),
     bell_s: line(`<path d="M6 16V11a6 6 0 0112 0v5l2 2H4z"/><path d="M10 20a2 2 0 004 0"/>`),
-    logo_s: `<svg viewBox="0 0 24 24"><defs><radialGradient id="ls" cx=".5" cy=".4" r=".6"><stop offset="0" stop-color="#fff"/><stop offset=".4" stop-color="#8ff0ff"/><stop offset="1" stop-color="#3a7bff"/></radialGradient></defs><circle cx="12" cy="12" r="8" fill="url(#ls)"/><circle cx="12" cy="12" r="10.5" fill="none" stroke="#7fe6ff" stroke-opacity=".7" stroke-width="1.2" stroke-dasharray="11 5"/></svg>`,
+    logo_s: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="5.5" fill="#e4e8f2"/><circle cx="12" cy="12" r="9.5" fill="none" stroke="#e4e8f2" stroke-opacity=".45" stroke-width="1.3"/></svg>`,
     wifi: line(`<path d="M2 9a15 15 0 0120 0M5 12.5a10 10 0 0114 0M8.5 16a5 5 0 017 0"/><circle cx="12" cy="19" r="1" fill="currentColor"/>`),
     bluetooth: line(`<path d="M7 7l10 10-5 4V3l5 4L7 17"/>`),
     moon: line(`<path d="M20 14.5A8 8 0 019.5 4a8 8 0 1010.5 10.5z"/>`),

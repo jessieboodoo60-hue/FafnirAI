@@ -14,10 +14,11 @@ Open `.env` and set `ANTHROPIC_API_KEY`.
 
 ## The screen (Fafnir runs it)
 
-The app is Fafnir's own desktop, in a "liquid glass" style: real frosted-glass windows over an aurora background (or your own image: `background` under `[app]` in `config.toml`, or pick a wallpaper in Settings).
+The app is Fafnir's own desktop: quiet frosted-glass windows over a painted dusk wallpaper (or your own image: `background` under `[app]` in `config.toml`, or pick a wallpaper in Settings).
 - **Menu bar** (top): Fafnir's menu, File / Window / Help, Fafnir's status, Search, Control Centre, notices (with a badge) and the clock.
 - **Dock** (bottom): Fafnir, Mail, Calendar, Tasks, Notices, Files, Business, Settings. Icons grow under the mouse; a dot marks open apps.
 - **Windows**: drag by the title bar, resize from any edge, the three buttons close / minimise (into the dock) / maximise; double-click the title bar to maximise. Right-click almost anything for more options.
+- **Other monitors**: drag a window past the edge of Fafnir's screen and it carries on as a normal window on your other monitor (or right-click its title bar → *Move to another screen*). Right-click it there → *Move back to Fafnir's screen*.
 - **Fafnir** app: the orb (colour = state, swells with your voice) and today's conversation, with a type box.
 - **Files**: browse your folders, quick-look text files, open things, "ask Fafnir about this". Opening programs, reading secret files and moving to the Recycle Bin ask for your OK first, as always.
 - **Search** (`Ctrl+Space` or the magnifier): apps, files, notes, memory and business items, or send what you typed straight to Fafnir.
