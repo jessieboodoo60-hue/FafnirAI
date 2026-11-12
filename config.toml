@@ -117,7 +117,7 @@ end_silence_seconds = 1.0    # how long a pause means you've finished talking
 while_speaking = true        # say the wake word to cut Fafnir off mid-sentence
 # After Fafnir finishes speaking, keep listening this many seconds so you can just answer
 # (no wake word). Yes/no questions stay open until answered. 0 turns it off.
-follow_up_seconds = 6
+follow_up_seconds = 4
 
 [voice.stt]
 # Deepgram speech-to-text
