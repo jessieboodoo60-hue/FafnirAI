@@ -113,3 +113,7 @@ Hold the talk key, speak, release. Press it again while Fafnir is talking to cut
 It asks you to say "Fafnir" 6 times. The recordings stay in `data\wake\` (not uploaded anywhere). If it triggers by mistake, lower `sensitivity` under `[voice.wake]` in `config.toml`; if it misses you, raise it or re-record.
 
 To set the talk key: in Razer Synapse, assign the M5 macro key to F13 (or any unused key), then run `.venv\Scripts\python main.py --learn-key`, press it, and copy the `ptt_key` line it prints into `config.toml`.
+
+## Installing and removing software
+
+Ask Fafnir to install or uninstall an app or game ("install Pokemon Reborn", "install Spotify", "uninstall 7-Zip"). It uses winget (Windows' package manager), Steam (you click Steam's Install button once), or the official direct download (unzipped into `C:\Users\jessi\Games` with a Start menu shortcut). Installs run in the background; Fafnir tells you when it's done and opens it. Direct downloads ask once (showing the website) and are scanned with Windows Defender before anything runs.

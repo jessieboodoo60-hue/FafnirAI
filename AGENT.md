@@ -31,6 +31,10 @@ Also wanted, after the baseline: draft messages, and platform integrations for *
 - `computer_launch_app`, `computer_list_apps`: start any installed app from the Start menu by name.
 - Full control (owner's decision, 2026-11-10): `computer_run_command` (any PowerShell), `computer_close_app`, `computer_list_running_apps`, `computer_write_file`, `computer_make_folder`, `computer_move_or_copy`, `computer_delete` (Recycle Bin), `computer_media` (play/pause, tracks, volume).
 
+### Installing software (`fafnir/tools/installer.py`, 2026-11-12)
+- `software_search` (winget + Steam store), `software_install` (winget / steam / url), `software_uninstall`, `software_jobs`. Background jobs; completion files an important notice (spoken, pushed to phone) and opens the program if asked.
+- url installs: download to ~/Downloads/Fafnir, Windows Defender scan (exit code 2 = threat, abort), zips unzipped to ~/Games/<name>, main exe picked (Game.exe or name match, skipping uninstallers), Start menu shortcut, recorded in data/installs.json for uninstall. Always confirmed once (critical_if) because the link comes from the web; winget/steam follow the normal owner_asked rule.
+
 ### Confirmation gate (pulled forward from Tier 6)
 Tools declare when they need a yes (`confirm_if` in `fafnir/tools/registry.py`). The registry asks before running; each yes covers one action; no answer within 60 seconds means no.
 - **Owner asked = no second question** (owner's decision, 2026-11-10): gated tools carry an `owner_asked` flag. When the owner's own message directly asked for that exact action, Fafnir sets it and the action runs without asking again. It still asks when the action was its own idea, a step the owner didn't mention, or suggested by a file/web page/note, and on turns the owner didn't start (`owner_present=False`, for the future heartbeat).
