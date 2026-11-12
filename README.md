@@ -14,10 +14,19 @@ Open `.env` and set `ANTHROPIC_API_KEY`.
 
 ## The screen (Fafnir runs it)
 
-The app is a "liquid glass" screen: frosted panels over an aurora background (or your own image: `background` under `[app]` in `config.toml`).
-- **Right now** (top): a one-line briefing and the most important things at this moment, in order: urgent notices, a meeting within the hour, overdue tasks, important notices, VIP or important email, things due today, later events, then business & social.
-- **The stage** (centre): the orb, or whatever Fafnir puts on screen. Say or type "pull up my emails", "show me today", "put my tasks on screen" and it appears there; "clear the screen" or the CLOSE button removes it.
-- **Side panels**: Today, Tasks, Notices, Email, Business & Social, Activity. Ask Fafnir to rearrange them ("put email first", "hide activity", "make the conversation small").
+The app is Fafnir's own desktop, in a "liquid glass" style: real frosted-glass windows over an aurora background (or your own image: `background` under `[app]` in `config.toml`, or pick a wallpaper in Settings).
+- **Menu bar** (top): Fafnir's menu, File / Window / Help, Fafnir's status, Search, Control Centre, notices (with a badge) and the clock.
+- **Dock** (bottom): Fafnir, Mail, Calendar, Tasks, Notices, Files, Business, Settings. Icons grow under the mouse; a dot marks open apps.
+- **Windows**: drag by the title bar, resize from any edge, the three buttons close / minimise (into the dock) / maximise; double-click the title bar to maximise. Right-click almost anything for more options.
+- **Fafnir** app: the orb (colour = state, swells with your voice) and today's conversation, with a type box.
+- **Files**: browse your folders, quick-look text files, open things, "ask Fafnir about this". Opening programs, reading secret files and moving to the Recycle Bin ask for your OK first, as always.
+- **Search** (`Ctrl+Space` or the magnifier): apps, files, notes, memory and business items, or send what you typed straight to Fafnir.
+- **Control Centre**: Wi-Fi and Bluetooth status, do not disturb, display brightness (where the monitor allows it), volume and media keys. Turning Wi-Fi on or off asks first; Bluetooth opens Windows settings.
+- **Right now** (top left): a one-line briefing and the most important things at this moment.
+- **Notifications** slide in at the top right; the Notices app lists them (dismiss, clear all, pause).
+- Say or type "pull up my emails", "show me today", "open my calendar", "open files in Downloads" and Fafnir opens the window; "clear the screen" closes what it put up.
+
+The older panel screen is still there: set `ui = "glass"` under `[app]`.
 
 ## The app
 
@@ -25,7 +34,7 @@ The app is a "liquid glass" screen: frosted panels over an aurora background (or
 .venv\Scripts\python main.py --app
 ```
 
-Opens Fafnir fullscreen on your right-hand monitor (change `screen` under `[app]` in `config.toml`). It also starts by itself when you log in to Windows, and it's in the Start menu as **Fafnir**. Hold M5 to talk or type in the box at the bottom; confirmations show Yes/No buttons. **Esc** stops Fafnir talking, **F11** toggles fullscreen, **Ctrl+Q** quits. Launching it again just brings the open one to the front.
+Opens Fafnir fullscreen on your right-hand monitor (change `screen` under `[app]` in `config.toml`). It also starts by itself when you log in to Windows, and it's in the Start menu as **Fafnir**. Hold M5 to talk or type in Fafnir's window; confirmations show Yes/No buttons. **Esc** stops Fafnir talking, **Ctrl+Space** opens Search, **Ctrl+W** closes a window, **Ctrl+M** minimises it, **F11** toggles fullscreen, **Ctrl+Q** quits. Launching it again just brings the open one to the front.
 
 To stop it starting with Windows: `.venv\Scripts\python main.py --remove-startup` (and `--install-startup` to turn it back on). If the app misbehaves, errors are in `logs\app.log`.
 

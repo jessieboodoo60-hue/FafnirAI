@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fafnir</title>
+<link rel="stylesheet" href="desktop.css">
+</head>
+<body>
+  <!-- wallpaper: aurora layers (or the owner's image) -->
+  <div id="wallpaper"><div class="aurora a1"></div><div class="aurora a2"></div><div class="aurora a3"></div><div class="aurora a4"></div><div class="grain"></div></div>
+
+  <!-- top menu bar -->
+  <header id="menubar" class="glass bar">
+    <div class="left">
+      <button class="mb-item logo" data-menu="fafnir" title="Fafnir"></button>
+      <button class="mb-item app-name" data-menu="app" id="mb-app">Fafnir</button>
+      <button class="mb-item" data-menu="file">File</button>
+      <button class="mb-item" data-menu="window">Window</button>
+      <button class="mb-item" data-menu="help">Help</button>
+    </div>
+    <div class="right">
+      <div class="mb-status" id="mb-status"><span class="dot"></span><span id="mb-status-text">Ready</span></div>
+      <button class="mb-icon" id="mb-search" title="Search (Ctrl+Space)"></button>
+      <button class="mb-icon" id="mb-control" title="Control Centre"></button>
+      <button class="mb-icon" id="mb-bell" title="Notices"><span class="badge" id="mb-badge"></span></button>
+      <button class="mb-clock" id="mb-clock"></button>
+    </div>
+  </header>
+
+  <!-- desktop surface: icons, the Right-now widget and windows live here -->
+  <main id="desktop">
+    <section id="widget-now" class="glass widget">
+      <div class="w-kicker">Right now</div>
+      <div class="w-briefing" id="now-briefing">Getting your day ready…</div>
+      <ul class="w-items" id="now-items"></ul>
+    </section>
+    <div id="icons"></div>
+    <div id="windows"></div>
+  </main>
+
+  <!-- dock -->
+  <nav id="dock-wrap"><div id="dock" class="glass"></div></nav>
+
+  <!-- overlays -->
+  <div id="banners"></div>
+  <div id="menu-layer"></div>
+  <div id="search" class="overlay hidden">
+    <div class="search-box glass">
+      <div class="search-row"><span class="search-glyph"></span><input id="search-input" placeholder="Search apps, files, notes, memory… or ask Fafnir" autocomplete="off"></div>
+      <div id="search-results"></div>
+    </div>
+  </div>
+  <div id="control" class="glass popover hidden"></div>
+  <div id="confirm" class="overlay hidden">
+    <div class="sheet glass">
+      <div class="sheet-kicker">Fafnir needs your OK</div>
+      <div class="sheet-text" id="confirm-text"></div>
+      <pre class="sheet-detail" id="confirm-detail"></pre>
+      <div class="sheet-hint" id="confirm-hint"></div>
+      <div class="sheet-buttons"><button class="btn" id="confirm-no">No</button><button class="btn primary" id="confirm-yes">Yes, do it</button></div>
+    </div>
+  </div>
+
+  <script src="qrc:///qtwebchannel/qwebchannel.js"></script>
+  <script src="icons.js"></script>
+  <script src="desktop.js"></script>
+  <script src="apps.js"></script>
+</body>
+</html>

@@ -44,6 +44,9 @@ fullscreen = true
 talk_key_label = "M5"
 # Background: "" = the built-in aurora, or a path to your own image (e.g. "C:/Users/jessi/Pictures/wall.jpg").
 background = ""
+# Which screen: "desktop" = the liquid-glass desktop (menu bar, dock, windows, search, files),
+# "glass" = the simpler panel screen.
+ui = "desktop"
 
 [phone]
 # Reach you on WhatsApp through the official WhatsApp Business Cloud API (Meta).

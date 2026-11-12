@@ -1054,7 +1054,12 @@ def run_app(argv: list[str]) -> int:
         return 1
     app_cfg = _app_config()
     agent = build_agent(cfg)
-    bridge = Bridge()
+    desktop = str(app_cfg.get("ui", "desktop")).lower() != "glass"
+    if desktop:
+        from .desktop import DesktopEvents, DesktopWindow
+        bridge = DesktopEvents()
+    else:
+        bridge = Bridge()
     try:
         engine = Engine(cfg, agent, bridge, voice=True)
     except Exception as e:  # bad talk key or audio device: run with typing only
@@ -1065,15 +1070,21 @@ def run_app(argv: list[str]) -> int:
     from ..tools import HEARTBEAT, NOTICES
     heartbeat = Heartbeat(agent.registry, NOTICES, default_checks(load_settings()))
     HEARTBEAT["hb"] = heartbeat
-    win = MainWindow(cfg, app_cfg, engine, bridge, heartbeat=heartbeat, notices=NOTICES)
-    SCREEN.attach(lambda action, payload: bridge.sig_screen.emit(action, payload))  # Fafnir's screen tools
+    if desktop:   # the liquid-glass desktop (HTML in a web view); [app] ui = "glass" keeps the older Qt screen
+        win = DesktopWindow(cfg, app_cfg, engine, bridge, heartbeat=heartbeat, notices=NOTICES)
+        SCREEN.attach(lambda action, payload: bridge.screen.emit(action, payload))
+        on_status = bridge.info
+    else:
+        win = MainWindow(cfg, app_cfg, engine, bridge, heartbeat=heartbeat, notices=NOTICES)
+        SCREEN.attach(lambda action, payload: bridge.sig_screen.emit(action, payload))  # Fafnir's screen tools
+        on_status = bridge.sig_info.emit
+        if not engine.voice:
+            missing = cfg.voice.missing_keys()
+            win._append_text(
+                ("Voice is off: add " + ", ".join(missing) + " to .env.\n") if missing
+                else "Voice is off (couldn't start the microphone, speaker or talk key). Typing still works.\n", C_DIM)
     server.newConnection.connect(lambda: (server.nextPendingConnection(), win.showFullScreen(),
                                           win.raise_(), win.activateWindow()))
-    if not engine.voice:
-        missing = cfg.voice.missing_keys()
-        win._append_text(
-            ("Voice is off: add " + ", ".join(missing) + " to .env.\n") if missing
-            else "Voice is off (couldn't start the microphone, speaker or talk key). Typing still works.\n", C_DIM)
 
     screen = pick_screen(app, str(app_cfg.get("screen", "right")))
     win.setGeometry(screen.geometry())
@@ -1089,9 +1100,9 @@ def run_app(argv: list[str]) -> int:
     from .. import discord_link, phone as whatsapp
     for make in (discord_link.make_bridge, whatsapp.make_bridge):
         try:
-            link = make(engine, NOTICES, on_status=bridge.sig_info.emit, name=cfg.assistant.name)
+            link = make(engine, NOTICES, on_status=on_status, name=cfg.assistant.name)
             if link is not None:
                 link.start()
         except Exception as e:
-            bridge.sig_info.emit(f"Phone link failed to start: {e}")
+            on_status(f"Phone link failed to start: {e}")
     return app.exec()

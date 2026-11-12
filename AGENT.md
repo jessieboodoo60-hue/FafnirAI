@@ -108,7 +108,14 @@ Each tier runs and is verified on its own before the next starts.
 - `fafnir/phone.py`: official WhatsApp Business Cloud API (Graph v23.0). Fafnir sends from its own business/test number. Incoming messages arrive at a local webhook (127.0.0.1:8787) exposed by an ngrok static domain that Fafnir starts; every delivery is HMAC-checked with the app secret, and only the owner's number (`WHATSAPP_OWNER_NUMBER`) is acted on.
 - Phone messages are owner turns through the same Engine (`source="phone"`), answered by text; confirmations get Yes/No reply buttons. Important notices are pushed once (skipped if older than 6 h). WhatsApp's 24-hour rule: free text only within 24 h of the owner's last message; outside it, alerts need `alert_template` (an approved Utility template) or they stay in the Notices panel.
 
-## Desktop app ("a face", built 2026-11-10; liquid-glass redesign 2026-11-11)
+## Desktop app ("a face", built 2026-11-10; liquid-glass redesign 2026-11-11; desktop environment 2026-11-11)
+### Fafnir's desktop (default, `[app] ui = "desktop"`)
+- `fafnir/ui/desktop.py`: frameless fullscreen `QWebEngineView` hosting `fafnir/ui/web/` (index.html, desktop.css, icons.js, desktop.js = window manager/dock/menus/search/control centre/banners, apps.js = the apps). Page <-> Python via QWebChannel object `fafnir` (`DesktopBridge` slots; everything to the page is JSON on `DesktopBridge.event`). `DesktopEvents` is the Engine's Events, marshalled to the UI thread.
+- All actions go through the registry: reads via `registry.read`, risky ones (open program, read secret file, delete, Wi-Fi on/off via `computer_run_command`) via `registry.run(..., confirm=engine.confirm)` so the normal confirmation sheet appears. Brightness uses WMI; volume/media use `computer_media`.
+- Offline: no CDN, original inline-SVG icons, system font stack, no Apple names or assets. Window positions, desktop icon positions and wallpaper live in the page's localStorage.
+- `screen_open(app, path)` opens an app window; `screen_show` opens a Viewer window; `screen_layout` maps the old panel names to apps (today->calendar, email->mail, activity->fafnir) and tiles them.
+- `[app] ui = "glass"` falls back to the Qt panel screen below.
+### Panel screen (`[app] ui = "glass"`)
 ### Screen control (owner: "Fafnir controls everything; pull up = it pulls it up")
 - `fafnir/screen.py` (SCREEN bus) + `fafnir/tools/screen_tools.py`: `screen_show` (list | cards | table | text on the centre stage), `screen_clear`, `screen_layout` (panel order/hidden, conversation show/small/hide), `screen_briefing`, `screen_status`. Tools run on worker threads; the app attaches a handler that forwards to the UI thread via `Bridge.sig_screen`. Without the app they report "no screen".
 - `fafnir/ui/glass.py`: aurora background (or `[app] background` image), pre-blurred copy; `GlassFrame` paints the blurred crop + tint + sheen + bright edge.

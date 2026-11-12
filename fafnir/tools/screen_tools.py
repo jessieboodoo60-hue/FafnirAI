@@ -10,6 +10,9 @@ ITEM = {"type": "object", "description": "One entry: title, and optionally subti
         "(urgent | important | good | info) for its colour."}
 
 
+APPS = ["fafnir", "mail", "calendar", "tasks", "notices", "files", "business", "settings"]
+
+
 def register(reg: Registry) -> None:
     def screen_show(title: str, kind: str = "list", items: list | None = None, columns: list | None = None,
                     text: str = "", subtitle: str = "") -> dict:
@@ -52,6 +55,14 @@ def register(reg: Registry) -> None:
         if not SCREEN.send("briefing", {"text": text[:220]}):
             return {"set": False, "note": NO_SCREEN}
         return {"set": True}
+
+    def screen_open(app: str, path: str = "") -> dict:
+        if app not in APPS:
+            raise ToolError(f"Unknown app {app!r}. Apps are: {', '.join(APPS)}.")
+        payload = {"app": app, "path": path or None}
+        if not SCREEN.send("open", payload):
+            return {"opened": False, "note": NO_SCREEN}
+        return {"opened": True, "app": app}
 
     def screen_status() -> dict:
         if not SCREEN.available:
@@ -105,6 +116,20 @@ def register(reg: Registry) -> None:
         properties={"text": {"type": "string"}},
         required=["text"],
         handler=screen_briefing,
+    ))
+    reg.register(Tool(
+        name="screen_open",
+        description=(
+            "Open one of the desktop's apps as a window on the owner's screen: " + ", ".join(APPS) + ". "
+            "Use when they say open / bring up an app (\"open my calendar\", \"open files in Downloads\"). "
+            "For `files`, `path` opens that folder. To show specific results, use screen_show instead."
+        ),
+        properties={
+            "app": {"type": "string", "enum": APPS},
+            "path": {"type": "string", "description": "Folder to open (files app only)."},
+        },
+        required=["app"],
+        handler=screen_open,
     ))
     reg.register(Tool(
         name="screen_status",
