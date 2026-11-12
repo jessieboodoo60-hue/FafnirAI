@@ -101,6 +101,7 @@ class Engine:
         self.wake = None
         self.wake_problem = ""           # why the wake word is off, for displays
         self._wake_live = None
+        self._window_gen = 0             # bumps whenever a pending follow-up window is cancelled
         if self.voice and cfg.voice.wake_enabled:
             self._setup_wake()
 
@@ -111,7 +112,8 @@ class Engine:
             from .voice.wake import WakeWord
             self.wake = WakeWord(ROOT / "data" / "wake", v.wake_sensitivity,
                                  on_wake=self._wake_detected, on_chunk=None, on_done=self._wake_done,
-                                 end_silence=v.wake_end_silence, name=self.name)
+                                 end_silence=v.wake_end_silence, name=self.name,
+                                 on_open=self._open_mic_heard)
         except Exception as e:  # no recordings yet, or no mic
             self.wake = None
             self.wake_problem = f"Wake word off: {e}"
@@ -152,6 +154,8 @@ class Engine:
             return "listening"
         if self.pending_confirm:
             return "confirming"
+        if self.wake and self.wake.window_open and not (self.speaker and self.speaker.speaking):
+            return "listening"   # just answer, no wake word needed
         if self.speaker and self.speaker.speaking:
             return "speaking"
         if self.busy:
@@ -199,6 +203,46 @@ class Engine:
             _beep(740, 90)
         if self.speaker:
             self.speaker.say(text)
+            self._follow_up(self.cfg.voice.follow_up_seconds)
+
+    # ---- follow-up listening: answer without the wake word -----------------------
+    def _follow_up(self, seconds: float) -> None:
+        """Once Fafnir has finished speaking, listen for `seconds` without the wake word."""
+        if not self.wake or seconds <= 0:
+            return
+        gen = self._window_gen
+
+        def wait_then_open() -> None:
+            time.sleep(0.2)
+            deadline = time.monotonic() + 180
+            while self.speaker and self.speaker.speaking and time.monotonic() < deadline:
+                time.sleep(0.05)
+            time.sleep(0.35)  # let the room's echo of Fafnir's voice die down
+            if gen == self._window_gen and self.wake and self.turns.empty():
+                self.wake.open_window(seconds)
+
+        threading.Thread(target=wait_then_open, daemon=True).start()
+
+    def _close_follow_up(self) -> None:
+        self._window_gen += 1
+        if self.wake:
+            self.wake.close_window()
+
+    def _open_mic_heard(self) -> bool:
+        """Speech started inside a follow-up window. Returns True to capture it."""
+        if self.recorder and self.recorder.recording:
+            return False
+        if self.speaker and self.speaker.speaking:
+            return False  # probably Fafnir's own voice
+        try:
+            self._wake_live = self.stt.start_live(self.wake.rate)
+            self.wake.set_on_chunk(self._wake_live.send)
+        except Exception:
+            self._wake_live = None
+            self.wake.set_on_chunk(None)
+        if self.cfg.voice.cue_sounds:
+            _beep(660, 60)
+        return True
 
     def reset(self) -> None:
         self.interrupt()
@@ -221,6 +265,7 @@ class Engine:
             _beep(520, 120)
         if self.speaker and not self.current_source.startswith("phone"):
             self.speaker.say(f"I need your OK. {action.split(CONFIRM_MARK)[0]} Yes or no?")
+            self._follow_up(CONFIRM_TIMEOUT)   # just say yes or no, no wake word
         timed_out = False
         try:
             answer = answers.get(timeout=CONFIRM_TIMEOUT)
@@ -229,12 +274,14 @@ class Engine:
         finally:
             self._confirm_answer = None
             self.pending_confirm = None
+            self._close_follow_up()
         ok = is_yes(answer)
         self.events.confirm_done(ok, timed_out)
         return ok
 
     # ---- push-to-talk --------------------------------------------------------
     def _ptt_down(self) -> None:
+        self._close_follow_up()
         if self._confirm_answer is not None:
             self.speaker.stop()  # answering a confirmation: don't cancel the turn
         else:
@@ -273,6 +320,7 @@ class Engine:
         if self._confirm_answer is not None:
             threading.Thread(target=self._answer_confirm_from_audio, args=(wav, live), daemon=True).start()
             return
+        self._close_follow_up()
         self.turns.put((kind, wav, live, time.monotonic(), {"source": "spoken"}))
 
     # ---- wake word -------------------------------------------------------------
@@ -297,15 +345,16 @@ class Engine:
             _beep(660, 60)
         return True
 
-    def _wake_done(self, wav: bytes, seconds: float) -> None:
+    def _wake_done(self, wav: bytes, seconds: float, open_mic: bool = False) -> None:
         self.wake.set_on_chunk(None)
         live, self._wake_live = self._wake_live, None
         if seconds < MIN_SECONDS:
             if live:
                 live.abort()
-            self.events.notice("Didn't hear anything after the wake word.")
+            if not open_mic:
+                self.events.notice("Didn't hear anything after the wake word.")
             return
-        self._utterance_ready(wav, live, kind="wake_audio")
+        self._utterance_ready(wav, live, kind="open_audio" if open_mic else "wake_audio")
 
     def _answer_confirm_from_audio(self, wav: bytes, live) -> None:
         answers = self._confirm_answer
@@ -360,7 +409,7 @@ class Engine:
             self.busy = True
             try:
                 stats = TurnStats()
-                if kind in ("audio", "wake_audio"):
+                if kind in ("audio", "wake_audio", "open_audio"):
                     try:
                         text, how = self._transcribe(payload, live)
                     except STTError as e:
@@ -368,7 +417,8 @@ class Engine:
                         continue
                     stats.transcribe = f"{time.monotonic() - started:.1f}s ({how})"
                     if not text:
-                        self.events.notice("Didn't catch that.")
+                        if kind != "open_audio":  # a noise during a follow-up window: stay quiet
+                            self.events.notice("Didn't catch that.")
                         continue
                     if kind == "wake_audio" and not mentions_name(text, self.name):
                         # the local matcher fired but Deepgram didn't hear the name: a false alarm
@@ -440,5 +490,8 @@ class Engine:
                 time.sleep(0.05)
             if self.speaker.first_audio_at is not None:
                 stats.first_audio = self.speaker.first_audio_at - started
+            if answer:  # keep listening briefly so the owner can just answer
+                secs = self.cfg.voice.follow_up_seconds
+                self._follow_up(max(secs, 10) if secs > 0 and answer.endswith("?") else secs)
         stats.cost = cost_line(self.agent.llm.usage, usage_before)[1:-1]
         self.events.reply_end(interrupted, stats)

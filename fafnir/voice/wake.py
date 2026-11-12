@@ -32,14 +32,18 @@ NO_SPEECH_TIMEOUT = 5.0          # wake word heard but nothing after it -> give 
 class WakeWord:
     def __init__(self, samples_folder: Path, sensitivity: float,
                  on_wake: Callable[[], bool], on_chunk: Callable[[bytes], None] | None,
-                 on_done: Callable[[bytes, float], None], end_silence: float = 1.0,
-                 name: str = "Fafnir"):
+                 on_done: Callable[[bytes, float, bool], None], end_silence: float = 1.0,
+                 name: str = "Fafnir", on_open: Callable[[], bool] | None = None):
         """`on_wake()` returns False to ignore a detection (e.g. already recording).
-        `on_chunk` gets live audio while capturing; `on_done(wav, seconds)` gets the result."""
+        `on_chunk` gets live audio while capturing; `on_done(wav, seconds, open_mic)` gets the
+        result. While a follow-up window is open (`open_window`), any speech is captured
+        without the wake word, once `on_open()` agrees; `open_mic` is then True."""
         self.spotter = Spotter(samples_folder, sensitivity)
         self.name = name
         self.rate = RATE
-        self.on_wake, self.on_chunk, self.on_done = on_wake, on_chunk, on_done
+        self.on_wake, self.on_chunk, self.on_done, self.on_open = on_wake, on_chunk, on_done, on_open
+        self._open_until = 0.0          # monotonic time the follow-up window closes
+        self._opened = False            # the current capture came from the follow-up window
         self.end_silence = end_silence
         self.capturing = False
         self.level = 0.0
@@ -78,6 +82,17 @@ class WakeWord:
     def set_on_chunk(self, fn) -> None:
         self.on_chunk = fn
 
+    # ---- follow-up window: answer without the wake word --------------------------------
+    def open_window(self, seconds: float) -> None:
+        self._open_until = time.monotonic() + seconds
+
+    def close_window(self) -> None:
+        self._open_until = 0.0
+
+    @property
+    def window_open(self) -> bool:
+        return not self.capturing and time.monotonic() < self._open_until
+
     # ---- audio -------------------------------------------------------------------
     def _callback(self, indata, frames, time_info, status) -> None:
         data = self._buf + bytes(indata)
@@ -110,6 +125,15 @@ class WakeWord:
         if not speech:  # track the room's background level
             self._noise = 0.95 * self._noise + 0.05 * lvl
         now = self._clock
+
+        if speech and self.window_open and self.on_open and self.on_open():
+            # Fafnir just spoke or asked something: take this as the answer, no wake word
+            frames = (self._seg or list(self._pre)) + [chunk]
+            self._seg, self._ignore_until_quiet = None, False
+            self._pre.clear()
+            self._open_until = 0.0
+            self._begin(frames, still_talking=True, opened=True)
+            return
 
         if self._ignore_until_quiet:
             if speech:
@@ -145,9 +169,10 @@ class WakeWord:
                 self._seg_quiet_since = None
 
     # ---- capturing what's said after the wake word -------------------------------------
-    def _begin(self, already: list[bytes], still_talking: bool) -> None:
+    def _begin(self, already: list[bytes], still_talking: bool, opened: bool = False) -> None:
         with self._lock:
             self.capturing = True
+            self._opened = opened
             self._frames = list(already)
             self._started = self._clock
             # if "Fafnir" was said on its own, wait for the request; if they carried on
@@ -188,7 +213,7 @@ class WakeWord:
             w.setframerate(RATE)
             w.writeframes(pcm)
         seconds = len(pcm) / (2 * RATE) if heard_speech else 0.0
-        threading.Thread(target=self.on_done, args=(buf.getvalue(), seconds), daemon=True).start()
+        threading.Thread(target=self.on_done, args=(buf.getvalue(), seconds, self._opened), daemon=True).start()
 
 
 # ---- recording the owner's samples ---------------------------------------------------
