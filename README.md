@@ -12,6 +12,13 @@ copy .env.example .env
 
 Open `.env` and set `ANTHROPIC_API_KEY`.
 
+## The screen (Fafnir runs it)
+
+The app is a "liquid glass" screen: frosted panels over an aurora background (or your own image: `background` under `[app]` in `config.toml`).
+- **Right now** (top): a one-line briefing and the most important things at this moment, in order: urgent notices, a meeting within the hour, overdue tasks, important notices, VIP or important email, things due today, later events, then business & social.
+- **The stage** (centre): the orb, or whatever Fafnir puts on screen. Say or type "pull up my emails", "show me today", "put my tasks on screen" and it appears there; "clear the screen" or the CLOSE button removes it.
+- **Side panels**: Today, Tasks, Notices, Email, Business & Social, Activity. Ask Fafnir to rearrange them ("put email first", "hide activity", "make the conversation small").
+
 ## The app
 
 ```

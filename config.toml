@@ -42,6 +42,8 @@ screen = "right"
 fullscreen = true
 # What the talk key is called on your keyboard (shown on screen).
 talk_key_label = "M5"
+# Background: "" = the built-in aurora, or a path to your own image (e.g. "C:/Users/jessi/Pictures/wall.jpg").
+background = ""
 
 [phone]
 # Reach you on WhatsApp through the official WhatsApp Business Cloud API (Meta).

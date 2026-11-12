@@ -108,7 +108,12 @@ Each tier runs and is verified on its own before the next starts.
 - `fafnir/phone.py`: official WhatsApp Business Cloud API (Graph v23.0). Fafnir sends from its own business/test number. Incoming messages arrive at a local webhook (127.0.0.1:8787) exposed by an ngrok static domain that Fafnir starts; every delivery is HMAC-checked with the app secret, and only the owner's number (`WHATSAPP_OWNER_NUMBER`) is acted on.
 - Phone messages are owner turns through the same Engine (`source="phone"`), answered by text; confirmations get Yes/No reply buttons. Important notices are pushed once (skipped if older than 6 h). WhatsApp's 24-hour rule: free text only within 24 h of the owner's last message; outside it, alerts need `alert_template` (an approved Utility template) or they stay in the Notices panel.
 
-## Desktop app ("a face", built 2026-11-10)
+## Desktop app ("a face", built 2026-11-10; liquid-glass redesign 2026-11-11)
+### Screen control (owner: "Fafnir controls everything; pull up = it pulls it up")
+- `fafnir/screen.py` (SCREEN bus) + `fafnir/tools/screen_tools.py`: `screen_show` (list | cards | table | text on the centre stage), `screen_clear`, `screen_layout` (panel order/hidden, conversation show/small/hide), `screen_briefing`, `screen_status`. Tools run on worker threads; the app attaches a handler that forwards to the UI thread via `Bridge.sig_screen`. Without the app they report "no screen".
+- `fafnir/ui/glass.py`: aurora background (or `[app] background` image), pre-blurred copy; `GlassFrame` paints the blurred crop + tint + sheen + bright edge.
+- `fafnir/ui/priorities.py`: ranks the "Right now" strip and composes the default briefing (Fafnir can override it for 30 min).
+
 - `python main.py --app` (`fafnir/ui/`): Qt (PySide6) fullscreen dark HUD. Left: today's calendar and open tasks. Centre: animated core (colour = state, swells with voice loudness). Right: notices (filled by the Tier 5 heartbeat) and recent activity. Bottom: conversation and a type box. Confirmations are Yes/No buttons and can also be answered by voice.
 - `[app]` in config.toml: `screen` ("right" = the monitor right of the main one), `fullscreen`, `talk_key_label`.
 - Starts with Windows via a Startup-folder shortcut (`--install-startup` / `--remove-startup`), launched with pythonw (no console). Only one instance runs; a second launch focuses the first. Errors go to `logs/app.log`.
