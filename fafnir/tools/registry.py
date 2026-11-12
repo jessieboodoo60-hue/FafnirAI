@@ -107,6 +107,7 @@ class Registry:
         self.server_tools: list[dict] = []  # Anthropic-hosted tools (web search/fetch)
         self.log_path = log_path
         self._log_lock = threading.Lock()
+        self._local = threading.local()
 
     def register(self, tool: Tool) -> None:
         if tool.name in self._tools:
@@ -173,9 +174,17 @@ class Registry:
             msg = f"The tool failed unexpectedly: {type(e).__name__}: {e}"
             self._log(name, args, msg, True, approved)
             return msg, True
+        images = result.pop("_images", None) if isinstance(result, dict) else None
+        self._local.images = images or []   # screenshots for the model; fetch with take_images()
         text = result if isinstance(result, str) else json.dumps(result, ensure_ascii=False, default=str)
         self._log(name, args_for_log, text, False, approved)
         return text, False
+
+    def take_images(self) -> list[bytes]:
+        """PNG images (e.g. screenshots) produced by this thread's most recent run(), then cleared."""
+        imgs = getattr(self._local, "images", [])
+        self._local.images = []
+        return imgs
 
     def _log(self, name: str, args: Any, result: str, is_error: bool, approved: bool | None) -> None:
         if not self.log_path:

@@ -35,6 +35,11 @@ Also wanted, after the baseline: draft messages, and platform integrations for *
 - `software_search` (winget + Steam store), `software_install` (winget / steam / url), `software_uninstall`, `software_jobs`. Background jobs; completion files an important notice (spoken, pushed to phone) and opens the program if asked.
 - url installs: download to ~/Downloads/Fafnir, Windows Defender scan (exit code 2 = threat, abort), zips unzipped to ~/Games/<name>, main exe picked (Game.exe or name match, skipping uninstallers), Start menu shortcut, recorded in data/installs.json for uninstall. Always confirmed once (critical_if) because the link comes from the web; winget/steam follow the normal owner_asked rule.
 
+### Screen, mouse and keyboard (`fafnir/tools/desktop_control.py`, owner granted full permission 2026-11-12)
+- `screen_look` (mss screenshot of a named monitor, scaled to 1280 wide, returned as an image), `mouse_click/move/drag/scroll`, `keyboard_type/keys` (pynput), all taking coordinates in the latest screenshot's pixels; actions return a fresh screenshot by default.
+- Tools can now return images: a handler returns `_images` (PNG bytes); `Registry.take_images()` hands them to the API agent (image blocks in tool_result) and the Claude Code agent (MCP image content).
+- Take-over: if the cursor moved >40 px from where Fafnir left it within 90 s, the next action stops with an error. `confirm_with_owner` routes risky on-screen actions through the normal gate. Max tool steps raised (API 40, Claude Code 60 turns).
+
 ### Confirmation gate (pulled forward from Tier 6)
 Tools declare when they need a yes (`confirm_if` in `fafnir/tools/registry.py`). The registry asks before running; each yes covers one action; no answer within 60 seconds means no.
 - **Owner asked = no second question** (owner's decision, 2026-11-10): gated tools carry an `owner_asked` flag. When the owner's own message directly asked for that exact action, Fafnir sets it and the action runs without asking again. It still asks when the action was its own idea, a step the owner didn't mention, or suggested by a file/web page/note, and on turns the owner didn't start (`owner_present=False`, for the future heartbeat).

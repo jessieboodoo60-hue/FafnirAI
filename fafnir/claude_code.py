@@ -11,6 +11,7 @@ Subscription usage limits apply instead of per-token billing.
 from __future__ import annotations
 
 import asyncio
+import base64
 import os
 import threading
 from concurrent.futures.thread import ThreadPoolExecutor  # imported eagerly on purpose, see below
@@ -80,16 +81,20 @@ class ClaudeCodeAgent:
         async def handle(args: dict[str, Any]) -> dict[str, Any]:
             t = self._turn
             cancel = t.get("cancel")
+            images: list[bytes] = []
             if cancel is not None and cancel.is_set():
                 text, is_error = "Not run: the turn was stopped.", True
             else:
-                # run in a worker thread: tools may block (confirmations wait for the owner)
-                text, is_error = await asyncio.get_running_loop().run_in_executor(
-                    self._pool, lambda: self.registry.run(name, args, confirm=t.get("confirm"),
-                                                    owner_present=t.get("owner_present", True)))
+                def call():  # in a worker thread: tools may block (confirmations wait for the owner)
+                    out = self.registry.run(name, args, confirm=t.get("confirm"),
+                                            owner_present=t.get("owner_present", True))
+                    return out + (self.registry.take_images(),)
+                text, is_error, images = await asyncio.get_running_loop().run_in_executor(self._pool, call)
             if t.get("on_tool"):
                 t["on_tool"](name, args, text, is_error)
-            return {"content": [{"type": "text", "text": text}], "is_error": is_error}
+            content = [{"type": "image", "data": base64.b64encode(img).decode(), "mimeType": "image/png"}
+                       for img in images] + [{"type": "text", "text": text}]
+            return {"content": content, "is_error": is_error}
         return handle
 
     def _options(self) -> ClaudeAgentOptions:
@@ -103,7 +108,7 @@ class ClaudeCodeAgent:
             effort=self.effort,
             include_partial_messages=True,
             setting_sources=[],                    # ignore CLAUDE.md / user settings
-            max_turns=12,
+            max_turns=60,
             cwd=os.path.expanduser("~"),
         )
 

@@ -1,13 +1,14 @@
 """The shared agent core. Every channel (typed, spoken, heartbeat) calls `run_turn`."""
 from __future__ import annotations
 
+import base64
 import threading
 from typing import Any, Callable
 
 from .llm import LLM, Reply
 from .tools.registry import Confirm, Registry
 
-MAX_STEPS = 12  # model calls per turn; stops runaway tool loops
+MAX_STEPS = 40  # model calls per turn; stops runaway tool loops
 
 # on_tool(name, input, result_text, is_error). For Anthropic-hosted tools (web search)
 # it's called once when the call starts, with input and result_text set to None.
@@ -85,8 +86,13 @@ class Agent:
                         )
                         if on_tool:
                             on_tool(block.name, block.input, text, is_error)
+                    images = [] if is_error else self.registry.take_images()
+                    content = text if not images else (
+                        [{"type": "image", "source": {"type": "base64", "media_type": "image/png",
+                                                      "data": base64.b64encode(img).decode()}} for img in images]
+                        + [{"type": "text", "text": text}])
                     results.append({"type": "tool_result", "tool_use_id": block.id,
-                                    "content": text, "is_error": is_error})
+                                    "content": content, "is_error": is_error})
                 if step == MAX_STEPS - 2:
                     results.append({"type": "text", "text": "Tool step limit reached. Answer now without more tools."})
                 # all results for one assistant message go back in a single user message

@@ -117,3 +117,7 @@ To set the talk key: in Razer Synapse, assign the M5 macro key to F13 (or any un
 ## Installing and removing software
 
 Ask Fafnir to install or uninstall an app or game ("install Pokemon Reborn", "install Spotify", "uninstall 7-Zip"). It uses winget (Windows' package manager), Steam (you click Steam's Install button once), or the official direct download (unzipped into `C:\Users\jessi\Games` with a Start menu shortcut). Installs run in the background; Fafnir tells you when it's done and opens it. Direct downloads ask once (showing the website) and are scanned with Windows Defender before anything runs.
+
+## Screen, mouse and keyboard
+
+Fafnir can see your monitors (main, right, above) and use the mouse and keyboard to do things that only work on screen: games, app menus, dialogs, websites and settings pages. It looks, acts, then checks the result. Move the mouse yourself at any time to take over; Fafnir stops. Risky on-screen actions you didn't directly ask for (deleting, sending, buying, uninstalling, changing settings) ask for your OK first, and it won't type passwords or card numbers unless you give them to it for that purpose.
