@@ -22,7 +22,8 @@ from datetime import date, datetime, timedelta
 from PySide6.QtCore import QObject, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWebChannel import QWebChannel
-from PySide6.QtWebEngineCore import QWebEngineSettings
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineProfile, QWebEngineSettings
+from PySide6.QtWidgets import QApplication
 from PySide6.QtWebEngineWidgets import QWebEngineView
 
 from ..config import ROOT
@@ -124,6 +125,34 @@ class DesktopBridge(QObject):
     @Slot()
     def refresh(self) -> None:
         self.w.refresh_data()
+
+    # ---- settings (saved in config.toml) ------------------------------------------------
+    @Slot(str)
+    def getSettings(self, req: str) -> None:
+        from .. import config_edit
+        try:
+            when = {f"{s}.{k}": spec[2] for (s, k), spec in config_edit.EDITABLE.items()}
+            self.emit("result", id=req, ok=True, data={"values": config_edit.current(), "when": when,
+                                                      "restartNeeded": self.w.restart_needed})
+        except Exception as e:
+            self.emit("result", id=req, ok=False, error=f"Couldn't read config.toml: {e}")
+
+    @Slot(str, str, str)
+    def saveSetting(self, name: str, value_json: str, req: str) -> None:
+        from .. import config_edit
+        try:
+            section, key = name.rsplit(".", 1)
+            stored = config_edit.set_value(section, key, json.loads(value_json))
+            when = config_edit.EDITABLE[(section, key)][2]
+            self.w.apply_setting(section, key, stored, when)
+            self.emit("result", id=req, ok=True, data={"value": stored, "when": when,
+                                                      "restartNeeded": self.w.restart_needed})
+        except Exception as e:
+            self.emit("result", id=req, ok=False, error=str(e))
+
+    @Slot()
+    def restartApp(self) -> None:
+        self.w.restart()
 
     # ---- files ---------------------------------------------------------------------------
     @Slot(str, str)
@@ -275,6 +304,14 @@ class DesktopWindow(QWebEngineView):
         self.registry = engine.agent.registry
         self.setWindowTitle(cfg.assistant.name)
         self.setWindowFlag(Qt.FramelessWindowHint, True)
+        # A saved (not private) browser profile, so wallpaper, window and icon positions
+        # survive restarts. It belongs to the app so it outlives the page.
+        self.profile = QWebEngineProfile("fafnir", QApplication.instance())
+        self.profile.setPersistentStoragePath(str(ROOT / "data" / "web"))
+        self.profile.setCachePath(str(ROOT / "data" / "web" / "cache"))
+        self.setPage(QWebEnginePage(self.profile, self))
+        self.restart_needed = False
+        self.restart_hook = None       # set by run_app: stops everything and relaunches
         self.bridge = DesktopBridge(self)
         self.channel = QWebChannel(self)
         self.channel.registerObject("fafnir", self.bridge)
@@ -450,6 +487,33 @@ class DesktopWindow(QWebEngineView):
     # ---- window --------------------------------------------------------------------------------
     def toggle_fullscreen(self) -> None:
         self.showNormal() if self.isFullScreen() else self.showFullScreen()
+
+    def apply_setting(self, section: str, key: str, value, when: str) -> None:
+        """Use a just-saved setting straight away where that's possible."""
+        import dataclasses
+        if when == "restart":
+            self.restart_needed = True
+            return
+        if section in ("voice", "voice.wake"):
+            field = {"cue_sounds": "cue_sounds", "follow_up_seconds": "follow_up_seconds",
+                     "while_speaking": "wake_while_speaking"}[key]
+            cfg = self.engine.cfg
+            self.engine.cfg = self.cfg = dataclasses.replace(cfg, voice=dataclasses.replace(cfg.voice, **{field: value}))
+        elif section == "model":
+            agent = self.engine.agent
+            if hasattr(agent, key if key == "effort" else "model"):
+                setattr(agent, "model" if key == "name" else "effort", value)   # Claude Code brain
+            llm = getattr(agent, "llm", None)
+            if llm is not None and hasattr(llm, "cfg"):                          # API brain
+                llm.cfg = dataclasses.replace(llm.cfg, **{key: value})
+        elif section == "app" and key == "background":
+            self.app_cfg["background"] = value
+            url = QUrl.fromLocalFile(os.path.expanduser(value)).toString() if value else ""
+            self.bridge.emit("wallpaper", url=url)
+
+    def restart(self) -> None:
+        if self.restart_hook:
+            self.restart_hook()
 
     def closeEvent(self, event) -> None:
         SCREEN.attach(None)

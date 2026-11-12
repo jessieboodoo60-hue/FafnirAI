@@ -24,7 +24,7 @@ import time
 import tomllib
 from datetime import date, datetime, timedelta
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, QProcess, Qt, QTimer, Signal
 from PySide6.QtGui import QColor, QFont, QKeySequence, QPainter, QShortcut, QTextCharFormat, QTextCursor
 from PySide6.QtNetwork import QLocalServer, QLocalSocket
 from PySide6.QtWidgets import (
@@ -1098,11 +1098,33 @@ def run_app(argv: list[str]) -> int:
     heartbeat.start()
     # phone links: Discord now, WhatsApp once Meta approves the business (either may be unset)
     from .. import discord_link, phone as whatsapp
+    links = []
     for make in (discord_link.make_bridge, whatsapp.make_bridge):
         try:
             link = make(engine, NOTICES, on_status=on_status, name=cfg.assistant.name)
             if link is not None:
                 link.start()
+                links.append(link)
         except Exception as e:
             on_status(f"Phone link failed to start: {e}")
+
+    def restart() -> None:
+        """Settings that need a restart: stop everything, then launch a fresh copy."""
+        for link in links:
+            try:
+                link.stop()
+            except Exception:
+                pass
+        for stop in (heartbeat.stop, engine.stop):
+            try:
+                stop()
+            except Exception:
+                pass
+        server.close()
+        QLocalServer.removeServer(INSTANCE_KEY)
+        QProcess.startDetached(sys.executable, [str(ROOT / "main.py"), "--app"], str(ROOT))
+        app.quit()
+
+    if desktop:
+        win.restart_hook = restart
     return app.exec()

@@ -200,19 +200,54 @@ const RENDER = {
     w.body.querySelectorAll("[data-id]").forEach((r) => (r.ondblclick = () => call("openUrl", "https://www.youtube.com/watch?v=" + r.dataset.id)));
   },
 
-  settings(w) {
+  async settings(w) {
+    if (!w.state.cfg) {
+      w.body.innerHTML = `<div class="h">Settings</div><div class="sub">Loading…</div>`;
+      const r = await request("getSettings");
+      w.state.cfg = r.ok ? r.data : { values: {}, when: {}, error: r.error };
+    }
+    const C = w.state.cfg, v = C.values || {};
     const wp = store.get("wallpaper", "") || "aurora";
     const sw = [["aurora", "linear-gradient(135deg,#1b3a8f,#5b3cc4,#0aa5a0)"], ["dusk", "linear-gradient(135deg,#3a1450,#ff5f9e,#ff9a5c)"],
                 ["ocean", "linear-gradient(135deg,#04324a,#00b5a6,#021220)"], ["graphite", "linear-gradient(135deg,#1b1f27,#3a3f4a,#0a0c10)"]];
-    w.body.innerHTML = `<div class="h">Settings</div><div class="sub">${esc(S.name)} desktop</div>
-      <div class="sec">Appearance</div><div class="set-group"><div class="set-row"><span>Wallpaper</span><div class="swatches">${sw.map(([k, g]) => `<button class="swatch ${wp === k ? "on" : ""}" data-wp="${k}" style="background:${g}" title="${k}"></button>`).join("")}</div></div>
-        <div class="set-row"><span class="k">Your own image: set <code>background</code> under <code>[app]</code> in config.toml</span></div></div>
-      <div class="sec">Notifications</div><div class="set-group"><div class="set-row"><span>Pause notices (do not disturb)</span><button class="switch ${S.paused ? "on" : ""}" id="set-dnd"></button></div></div>
-      <div class="sec">Voice</div><div class="set-group"><div class="set-row"><span>Voice</span><span class="k">${S.voice ? "On" : "Off"}</span></div>
-        <div class="set-row"><span>Talk key</span><span class="k">Hold ${esc(S.talkKey)}</span></div><div class="set-row"><span>Wake word</span><span class="k">${S.wake ? "“" + esc(S.wake) + "”" : "Off"}</span></div></div>
-      <div class="sec">About</div><div class="set-group"><div class="set-row"><span>${esc(S.name)}</span><span class="k">Your assistant · runs on this PC</span></div>
-        <div class="set-row"><span>Shortcuts</span><button class="btn" id="set-keys">Show</button></div></div>`;
+    const note = (k) => ({ restart: "after restart", conversation: "after a restart or /reset" }[C.when?.[k]] || "");
+    const seg = (k, opts) => `<div class="seg" data-k="${k}">${opts.map(([val, label]) => `<button class="${v[k] === val ? "on" : ""}" data-v='${JSON.stringify(val)}'>${esc(label)}</button>`).join("")}</div>`;
+    const sw_ = (k) => `<button class="switch ${v[k] ? "on" : ""}" data-k="${k}"></button>`;
+    const row = (label, ctl, k) => `<div class="set-row"><span>${label}${k && note(k) ? `<div class="set-note">Applies ${note(k)}</div>` : ""}</span>${ctl}</div>`;
+    w.body.innerHTML = `<div class="h">Settings</div><div class="sub">Changes save straight away${C.error ? " · " + esc(C.error) : ""}</div>
+      ${C.restartNeeded ? `<div class="restart-bar"><span>Some changes apply after a restart.</span><button class="btn primary" id="set-restart">Restart ${esc(S.name)}</button></div>` : ""}
+      <div class="sec">Brain</div><div class="set-group">
+        ${row("Model", seg("model.name", [["claude-sonnet-5-5", "Sonnet 5.5"], ["claude-opus-5-5", "Opus 5.5"], ["claude-haiku-5-5", "Haiku 5.5"]]), "model.name")}
+        ${row("Thinking effort", seg("model.effort", [["low", "Low"], ["medium", "Medium"], ["high", "High"], ["xhigh", "Extra high"]]), "model.effort")}</div>
+      <div class="sec">Voice</div><div class="set-group">
+        ${row(`Wake word “${esc(S.name)}”`, sw_("voice.wake.enabled"), "voice.wake.enabled")}
+        ${row(`Keep listening after ${esc(S.name)} speaks <span class="k" id="fu-val">${v["voice.wake.follow_up_seconds"] ?? 6}s</span>`, `<input type="range" class="slider set-slider" data-k="voice.wake.follow_up_seconds" min="0" max="30" step="1" value="${v["voice.wake.follow_up_seconds"] ?? 6}">`)}
+        ${row(`Wake word sensitivity <span class="k" id="sens-val">${v["voice.wake.sensitivity"] ?? 0.4}</span>`, `<input type="range" class="slider set-slider" data-k="voice.wake.sensitivity" min="0.1" max="0.9" step="0.05" value="${v["voice.wake.sensitivity"] ?? 0.4}">`, "voice.wake.sensitivity")}
+        ${row(`Say “${esc(S.name)}” to cut it off mid-sentence`, sw_("voice.wake.while_speaking"))}
+        ${row("Beeps when listening starts and stops", sw_("voice.cue_sounds"))}
+        ${row("Talk key", `<span class="k">Hold ${esc(S.talkKey)}</span>`)}</div>
+      <div class="sec">Screen</div><div class="set-group">
+        ${row("Wallpaper", `<div class="swatches">${sw.map(([k, g]) => `<button class="swatch ${wp === k ? "on" : ""}" data-wp="${k}" style="background:${g}" title="${k}"></button>`).join("")}</div>`)}
+        ${row("Your own picture", `<input class="field set-text" data-k="app.background" placeholder="C:/Users/you/Pictures/wall.jpg" value="${esc(v["app.background"] || "")}" style="max-width:320px">`)}
+        ${row("Monitor", seg("app.screen", [["right", "Right"], ["left", "Left"], ["above", "Above"], ["primary", "Main"]]), "app.screen")}</div>
+      <div class="sec">Notifications</div><div class="set-group">${row("Pause notices (do not disturb)", `<button class="switch ${S.paused ? "on" : ""}" id="set-dnd"></button>`)}</div>
+      <div class="sec">About</div><div class="set-group">${row(esc(S.name), `<span class="k">Your assistant · runs on this PC</span>`)}
+        ${row("Shortcuts", `<button class="btn" id="set-keys">Show</button>`)}</div>`;
+    const save = async (k, val) => {
+      const r = await request("saveSetting", k, JSON.stringify(val));
+      if (!r.ok) { banner({ title: "Couldn't save that setting", detail: r.error, urgency: "important", app: "settings" }); return; }
+      v[k] = r.data.value; C.restartNeeded = r.data.restartNeeded;
+      RENDER.settings(w);
+    };
+    w.body.querySelectorAll(".seg button").forEach((b) => (b.onclick = () => save(b.parentElement.dataset.k, JSON.parse(b.dataset.v))));
+    w.body.querySelectorAll(".switch[data-k]").forEach((b) => (b.onclick = () => save(b.dataset.k, !v[b.dataset.k])));
+    w.body.querySelectorAll(".set-slider").forEach((s) => {
+      const lbl = s.dataset.k.endsWith("seconds") ? "#fu-val" : "#sens-val";
+      s.oninput = () => (w.body.querySelector(lbl).textContent = s.dataset.k.endsWith("seconds") ? s.value + "s" : s.value);
+      s.onchange = () => save(s.dataset.k, +s.value); });
+    w.body.querySelectorAll(".set-text").forEach((t) => t.addEventListener("keydown", (e) => { if (e.key === "Enter") save(t.dataset.k, t.value.trim()); }));
     w.body.querySelectorAll(".swatch").forEach((b) => (b.onclick = () => { setWallpaper(b.dataset.wp); RENDER.settings(w); }));
+    w.body.querySelector("#set-restart")?.addEventListener("click", () => call("restartApp"));
     w.body.querySelector("#set-dnd").onclick = () => call("togglePause");
     w.body.querySelector("#set-keys").onclick = () => menubarMenus().help[1].fn();
   },

@@ -423,6 +423,7 @@ function onEvent(raw) {
       S.notices = m.items; S.paused = m.paused;
       const b = $("#mb-badge"), n = m.items.filter((x) => x.urgency !== "info").length || m.items.length;
       b.textContent = n; b.classList.toggle("show", m.items.length > 0); Apps.notices(); break;
+    case "wallpaper": setWallpaper(m.url ? "image" : "aurora", m.url); break;
     case "banner": banner({ title: m.title, detail: m.detail, urgency: m.urgency, app: "notices" }); break;
     case "confirm": Confirm.show(m.action); Apps.event(m); break;
     case "confirm_done": Confirm.hide(); Apps.event(m); break;
