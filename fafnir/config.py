@@ -59,6 +59,12 @@ class VoiceConfig:
     tts_model: str
     deepgram_api_key: str
     elevenlabs_api_key: str
+    tts_engine: str = "kokoro"     # "kokoro" (offline, no key) or "elevenlabs"
+    kokoro_voice: str = "am_onyx"
+    kokoro_pitch: float = -3.0
+    kokoro_speed: float = 1.0
+    kokoro_reverb: float = 0.0
+    kokoro_lang: str = "en-us"
     # wake word ("Fafnir"): matched locally against the owner's recordings in data/wake/
     wake_enabled: bool = False
     wake_sensitivity: float = 0.5
@@ -71,7 +77,7 @@ class VoiceConfig:
         missing = []
         if not self.deepgram_api_key:
             missing.append("DEEPGRAM_API_KEY")
-        if not self.elevenlabs_api_key:
+        if self.tts_engine == "elevenlabs" and not self.elevenlabs_api_key:
             missing.append("ELEVENLABS_API_KEY")
         return missing
 
@@ -118,6 +124,12 @@ def _voice(raw: dict) -> VoiceConfig:
         tts_model=tts.get("model", "eleven_flash_v2_5"),
         deepgram_api_key=os.environ.get("DEEPGRAM_API_KEY", "").strip(),
         elevenlabs_api_key=os.environ.get("ELEVENLABS_API_KEY", "").strip(),
+        tts_engine=str(tts.get("engine", "kokoro")),
+        kokoro_voice=str(tts.get("kokoro_voice", "am_onyx")),
+        kokoro_pitch=float(tts.get("kokoro_pitch", -3.0)),
+        kokoro_speed=float(tts.get("kokoro_speed", 1.0)),
+        kokoro_reverb=float(tts.get("kokoro_reverb", 0.0)),
+        kokoro_lang=str(tts.get("kokoro_lang", "en-us")),
         wake_enabled=bool(v.get("wake", {}).get("enabled", False)),
         wake_sensitivity=float(v.get("wake", {}).get("sensitivity", 0.5)),
         wake_engine=str(v.get("wake", {}).get("engine", "whisper")),

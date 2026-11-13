@@ -169,3 +169,87 @@ def _drain(q: queue.Queue) -> None:
             q.get_nowait()
     except queue.Empty:
         pass
+
+
+# ---- Kokoro: offline speech (no API key) ---------------------------------------------------
+class KokoroTTS:
+    """Speech made on this PC with the Kokoro model (models/kokoro). Same interface as
+    ElevenLabsTTS: stream_pcm() for the speaker, synth_ogg() for Discord voice notes.
+
+    The voice can be one Kokoro voice ("am_onyx") or a blend ("am_onyx+bm_george"), lowered
+    by `pitch` semitones at the same speaking pace (bigger, deeper), with optional reverb."""
+
+    _shared = None                      # one loaded model for the whole app
+    _lock = threading.Lock()
+
+    def __init__(self, voice: str = "am_onyx", pitch: float = -3.0, speed: float = 1.0, reverb: float = 0.0,
+                 lang: str = "en-us"):
+        self.voice, self.pitch, self.speed, self.reverb, self.lang = voice, pitch, speed, reverb, lang
+
+    @classmethod
+    def _model(cls):
+        with cls._lock:
+            if cls._shared is None:
+                from pathlib import Path
+                from kokoro_onnx import Kokoro
+                root = Path(__file__).resolve().parents[2] / "models" / "kokoro"
+                model, voices = root / "kokoro-v1.0.onnx", root / "voices-v1.0.bin"
+                if not model.exists() or not voices.exists():
+                    raise TTSError(f"Kokoro's model files are missing from {root}.")
+                cls._shared = Kokoro(str(model), str(voices))
+            return cls._shared
+
+    def _style(self, k):
+        names = [v.strip() for v in self.voice.split("+") if v.strip()]
+        if len(names) == 1:
+            return names[0]
+        import numpy as np
+        return np.mean([k.get_voice_style(n) for n in names], axis=0)
+
+    def _speak(self, text: str):
+        import numpy as np
+        k = self._model()
+        f = 2 ** (self.pitch / 12)       # e.g. -3 semitones: f = 0.84
+        try:
+            with self._lock:
+                s, sr = k.create(text, voice=self._style(k), speed=self.speed / f, lang=self.lang)
+        except Exception as e:
+            raise TTSError(f"Kokoro couldn't speak that ({type(e).__name__}).")
+        if f != 1:                       # stretch back to normal pace: same speed, lower pitch
+            n = int(len(s) / f)
+            s = np.interp(np.linspace(0, len(s) - 1, n), np.arange(len(s)), s).astype(np.float32)
+        if self.reverb:
+            out = s.copy()
+            for delay_ms, gain in ((37, .35), (71, .25), (113, .18), (167, .12)):
+                d = int(sr * delay_ms / 1000)
+                out[d:] += self.reverb * gain * s[:-d]
+            s = out
+        peak = float(np.abs(s).max()) if len(s) else 0.0
+        if peak > 0.98:
+            s = s / peak * 0.95
+        return s.astype(np.float32), sr
+
+    def stream_pcm(self, text: str) -> Iterator[bytes]:
+        import numpy as np
+        s, sr = self._speak(text)
+        if sr != PCM_RATE:
+            n = int(len(s) * PCM_RATE / sr)
+            s = np.interp(np.linspace(0, len(s) - 1, n), np.arange(len(s)), s).astype(np.float32)
+        pcm = (np.clip(s, -1, 1) * 32767).astype("<i2").tobytes()
+        for i in range(0, len(pcm), 9600):   # ~0.2 s pieces, so stop() still cuts in quickly
+            yield pcm[i:i + 9600]
+
+    def synth_ogg(self, text: str) -> bytes:
+        import io
+        import soundfile as sf
+        s, sr = self._speak(text)
+        buf = io.BytesIO()
+        sf.write(buf, s, sr, format="OGG", subtype="OPUS")
+        return buf.getvalue()
+
+
+def make_tts(v):
+    """The configured speech engine (VoiceConfig): Kokoro (default, offline) or ElevenLabs."""
+    if getattr(v, "tts_engine", "kokoro") == "elevenlabs":
+        return ElevenLabsTTS(v.elevenlabs_api_key, v.tts_voice_id, v.tts_model)
+    return KokoroTTS(v.kokoro_voice, v.kokoro_pitch, v.kokoro_speed, v.kokoro_reverb, v.kokoro_lang)

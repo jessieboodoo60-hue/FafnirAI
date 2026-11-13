@@ -125,3 +125,7 @@ Fafnir can see your monitors (main, right, above) and use the mouse and keyboard
 ## Camera security system (Hikvision DVR)
 
 Fafnir can check your cameras ("show me the cameras", "what's happening at the gate?"), list cameras and disk health, search recordings, move pan-tilt-zoom cameras, open the DVR's live view, and change DVR settings. Add the DVR login to `.env` (`HIKVISION_HOST`, `HIKVISION_USERNAME`, `HIKVISION_PASSWORD`) and restart. Settings changes follow the normal confirmation rules; formatting disks, factory resets, firmware, users/passwords and reboots always ask first.
+
+## Fafnir's voice (Kokoro)
+
+Fafnir speaks with Kokoro, a free speech model that runs on this PC: no API key and no character limits (Discord voice notes use it too). The voice is set under `[voice.tts]` in `config.toml`: `kokoro_voice` (e.g. `am_onyx`, `bm_george`, `am_fenrir`, or a blend like `am_onyx+bm_george`), `kokoro_pitch` (semitones; negative is deeper), `kokoro_speed` and `kokoro_reverb`. The model files live in `models\kokoro\` (about 350 MB). Set `engine = "elevenlabs"` to go back to ElevenLabs.

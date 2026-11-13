@@ -14,7 +14,7 @@ The single source of truth for what we're building and why. Update it when a dec
 - **Backups:** the heartbeat's `backup` check zips `data/`, `.env` and `config.toml` to `D:/FafnirBackups` daily, keeping 14 (`[heartbeat.backup]`); code is on GitHub.
 - **Brain:** Claude (`claude-sonnet-5-5`, switched from Opus 5.5 on 2026-11-10 to halve cost; set in config.toml) through the official `anthropic` SDK, behind one seam (`fafnir/llm.py`). Nothing else imports the SDK.
 - **Cost:** prompt caching is on (instructions, tools and history re-read at ~5% price). Each reply shows `[cost $x · N% cached · session $y]`; `show_cost` in config.toml turns it off.
-- **Voice (Tier 3):** Deepgram (speech-to-text) and ElevenLabs (text-to-speech), each behind its own seam. Voice chosen at Tier 3 and stored in config.
+- **Voice (Tier 3):** Deepgram (speech-to-text) and, since 2026-11-12, Kokoro text-to-speech running offline (kokoro-onnx, model in `models/kokoro/`, not backed up or committed; voice am_onyx lowered 3 semitones, owner's pick 'A'), each behind its own seam (`make_tts` in `fafnir/voice/tts.py`; ElevenLabs remains selectable with `[voice.tts] engine = "elevenlabs"`). Voice chosen at Tier 3 and stored in config.
 - **Runs on:** the owner's Windows laptop first. The heartbeat (Tier 5) is a separable process so it can move to an always-on host later without a rewrite.
 - **Secrets:** environment variables / `.env` (git-ignored). Never in source.
 

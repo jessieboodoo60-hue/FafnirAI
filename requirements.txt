@@ -14,3 +14,5 @@ discord.py
 mss
 pillow
 faster-whisper
+kokoro-onnx
+soundfile

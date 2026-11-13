@@ -128,7 +128,16 @@ model = "nova-3"
 language = "en"
 
 [voice.tts]
-# ElevenLabs text-to-speech
+# Fafnir's voice. "kokoro" = made on this PC (free, no key); "elevenlabs" = ElevenLabs API.
+engine = "kokoro"
+# Kokoro: a voice name (am_onyx, bm_george, am_fenrir, ...) or a blend like "am_onyx+bm_george",
+# pitch in semitones (negative = deeper), speed (1.0 normal), reverb (0 = none, 0.5 = cave-like).
+kokoro_voice = "am_onyx"
+kokoro_pitch = -3.0
+kokoro_speed = 1.0
+kokoro_reverb = 0.0
+kokoro_lang = "en-us"
+# ElevenLabs (only used if engine = "elevenlabs")
 voice_id = "43vS2JKzejLgSwmqF6gC"
 # eleven_flash_v2_5 = lowest latency; eleven_multilingual_v2 = richest quality, slower.
 model = "eleven_flash_v2_5"

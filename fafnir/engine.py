@@ -90,11 +90,11 @@ class Engine:
             from .voice.ptt import PushToTalk
             from .voice.recorder import Recorder
             from .voice.stt import DeepgramSTT
-            from .voice.tts import ElevenLabsTTS, Speaker
+            from .voice.tts import Speaker, make_tts
             v = cfg.voice
             keyterms = [self.name] + [p.strip() for p in cfg.assistant.home_location.split(",") if p.strip()]
             self.stt = DeepgramSTT(v.deepgram_api_key, v.stt_model, v.stt_language, keyterms)
-            self.speaker = Speaker(ElevenLabsTTS(v.elevenlabs_api_key, v.tts_voice_id, v.tts_model),
+            self.speaker = Speaker(make_tts(v),
                                    on_error=lambda m: self.events.error(m))
             self.recorder = Recorder()
             self.ptt = PushToTalk(v.ptt_key, self._ptt_down, self._ptt_up)

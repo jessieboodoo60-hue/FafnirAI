@@ -215,9 +215,9 @@ class DiscordBridge:
             from .voice.stt import DeepgramSTT
             stt = DeepgramSTT(cfg.deepgram_api_key, cfg.stt_model, cfg.stt_language, [self.name])
         tts = None
-        if cfg.elevenlabs_api_key:
-            from .voice.tts import ElevenLabsTTS
-            tts = ElevenLabsTTS(cfg.elevenlabs_api_key, cfg.tts_voice_id, cfg.tts_model)
+        if cfg.tts_engine != "elevenlabs" or cfg.elevenlabs_api_key:
+            from .voice.tts import make_tts
+            tts = make_tts(cfg)
         return stt, tts
 
     async def _send_voice(self, channel_id: int, answer: str, tts) -> None:
