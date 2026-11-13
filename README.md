@@ -112,6 +112,8 @@ Hold the talk key, speak, release. Press it again while Fafnir is talking to cut
 
 It asks you to say "Fafnir" 6 times. The recordings stay in `data\wake\` (not uploaded anywhere). If it triggers by mistake, lower `sensitivity` under `[voice.wake]` in `config.toml`; if it misses you, raise it or re-record.
 
+**Conversation mode:** after you say "Fafnir" once, just keep talking: after every reply Fafnir listens for 12 seconds more (15 after a question) without the wake word, and each exchange renews it. Noise and its own echo don't end the conversation, talk that isn't meant for it (TV, someone else) is quietly ignored, and "thanks, that's all" / "goodbye" / "never mind" ends it. A soft falling two-note tone means it has stopped listening; say "Fafnir" to start again. Length: `follow_up_seconds` under `[voice.wake]`.
+
 **Emergency kill switch:** stops everything at once and keeps Fafnir stopped (even after a restart) until you release it. While it's on, every action is blocked (mouse/keyboard, programs, files, email, cameras...), speech and the current reply are cut off, queued requests are dropped, heartbeat notices stop, and any held mouse button or key is let go.
 - Turn ON: **Ctrl+Alt+K**, or say/type "kill switch", "emergency stop" or "stop everything", or send `/kill` to the Discord bot, or run `python main.py --kill`.
 - Turn OFF: **Ctrl+Alt+Shift+K**, or type `/release` in the app, or send `/release` on Discord, or run `python main.py --release`. (Not by voice, since anyone in the room could say it.)

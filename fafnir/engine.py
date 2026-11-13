@@ -52,6 +52,26 @@ class _NeverDone:
     done = False
 
 
+NO_REPLY = "(no reply)"   # what the brain says when open-mic speech wasn't meant for it
+NOT_ADDRESSED_NOTE = (
+    "\n\n[System note: heard through the open mic during an ongoing conversation, without your "
+    "name. If it's clearly not meant for you (background talk, TV, someone else in the room, "
+    "a half-sentence), reply with exactly " + NO_REPLY + " and nothing else. Otherwise answer normally.]")
+GOODBYES = ("that's all", "thats all", "that is all", "that's it", "thats it", "goodbye", "good bye",
+            "bye", "never mind", "nevermind", "stop listening", "go to sleep", "i'm done", "im done",
+            "we're done", "were done", "no thanks", "nothing else", "that'll be all", "thatll be all")
+
+
+def is_goodbye(text: str) -> bool:
+    """Does the owner want to end the conversation? ("thanks, that's all", "goodbye")."""
+    import re
+    t = " ".join(re.findall(r"[a-z']+", text.lower()))
+    words = t.split()
+    if any(g in t for g in GOODBYES) and len(words) <= 8:
+        return True
+    return len(words) <= 4 and bool(re.search(r"\b(thanks|thank you|cheers)\b", t))
+
+
 def _drain_queue(q: queue.Queue) -> None:
     try:
         while True:
@@ -410,10 +430,13 @@ class Engine:
             self._follow_up(self.cfg.voice.follow_up_seconds)
 
     # ---- follow-up listening: answer without the wake word -----------------------
-    def _follow_up(self, seconds: float) -> None:
-        """Once Fafnir has finished speaking, listen for `seconds` without the wake word."""
+    def _follow_up(self, seconds: float, tone: bool = True) -> None:
+        """Conversation mode: once Fafnir has finished speaking, listen for `seconds` without the
+        wake word. Every exchange opens a fresh window, so a conversation just carries on; when a
+        window runs out unused, a soft falling tone says Fafnir has stopped listening."""
         if not self.wake or seconds <= 0:
             return
+        self._window_gen += 1   # a newer window replaces any older pending one
         gen = self._window_gen
 
         def wait_then_open() -> None:
@@ -422,10 +445,33 @@ class Engine:
             while self.speaker and self.speaker.speaking and time.monotonic() < deadline:
                 time.sleep(0.05)
             time.sleep(0.8 if self.on_loudspeaker() else 0.35)  # let the echo of Fafnir's voice die down
-            if gen == self._window_gen and self.wake and self.turns.empty():
-                self.wake.open_window(seconds)
+            if gen != self._window_gen or not self.wake or not self.turns.empty():
+                return
+            self.wake.open_window(seconds)
+            end = time.monotonic() + seconds
+            while time.monotonic() < end + 0.3:
+                time.sleep(0.2)
+                if gen != self._window_gen or self.wake.capturing or self.busy:
+                    return  # the owner spoke (or something else took over)
+            if gen == self._window_gen and self.turns.empty() and not self.busy:
+                self._conversation_over()
 
         threading.Thread(target=wait_then_open, daemon=True).start()
+
+    def _conversation_over(self) -> None:
+        """Stop listening without the wake word; a soft falling tone (if cue sounds are on)."""
+        self._window_gen += 1
+        if self.wake:
+            self.wake.close_window()
+        if self.cfg.voice.cue_sounds:
+            def tone():
+                time.sleep(0.1)
+                while self.speaker and self.speaker.speaking:
+                    time.sleep(0.05)
+                import winsound  # one after the other (_beep plays in the background)
+                winsound.Beep(520, 70)
+                winsound.Beep(390, 110)
+            threading.Thread(target=tone, daemon=True).start()
 
     def _close_follow_up(self) -> None:
         self._window_gen += 1
@@ -621,7 +667,9 @@ class Engine:
                         continue
                     stats.transcribe = f"{time.monotonic() - started:.1f}s ({how})"
                     if not text:
-                        if kind != "open_audio":  # a noise during a follow-up window: stay quiet
+                        if kind == "open_audio":  # a noise during the conversation: stay quiet, keep listening
+                            self._follow_up(self.cfg.voice.follow_up_seconds, tone=False)
+                        else:
                             self.events.notice("Didn't catch that.")
                         continue
                     from . import killswitch
@@ -634,6 +682,8 @@ class Engine:
                         continue
                     if kind in ("wake_audio", "open_audio") and self.on_loudspeaker() and self._is_own_echo(text):
                         print(f"[voice] ignored my own voice: {text!r}", flush=True)
+                        if kind == "open_audio":
+                            self._follow_up(self.cfg.voice.follow_up_seconds, tone=False)
                         continue
                     if kind == "wake_audio" and not mentions_name(text, self.name):
                         # the local matcher fired but Deepgram didn't hear the name: a false alarm
@@ -645,13 +695,16 @@ class Engine:
                 from . import killswitch
                 if self.cancel.is_set() or killswitch.engaged():
                     continue
-                self._run(text, started, stats, source=extra.get("source", "typed"), reply=extra.get("reply"))
+                spoken = kind in ("audio", "wake_audio", "open_audio")
+                self._run(text, started, stats, source=extra.get("source", "typed"), reply=extra.get("reply"),
+                          open_mic=kind == "open_audio", ending=spoken and is_goodbye(text))
             except Exception as e:  # never let the worker die
                 self.events.error(f"Something went wrong: {type(e).__name__}: {e}")
             finally:
                 self.busy = False
 
-    def _run(self, text: str, started: float, stats: TurnStats, source: str = "", reply=None) -> None:
+    def _run(self, text: str, started: float, stats: TurnStats, source: str = "", reply=None,
+             open_mic: bool = False, ending: bool = False) -> None:
         from .tools import CONVERSATIONS
         CONVERSATIONS.append("user", text, source)
         self.current_source = source
@@ -668,7 +721,17 @@ class Engine:
                 for s in sentences:
                     self.speaker.say(s)
 
+        held = [""] if open_mic else None   # open-mic turns: hold text until it's clearly not "(no reply)"
+        held_done = [False]
+
         def on_text(t: str) -> None:
+            if held is not None and not held_done[0]:
+                held[0] += t
+                lead = held[0].lstrip()
+                if NO_REPLY.startswith(lead) or lead.startswith(NO_REPLY):
+                    return  # might be (or is) the "not for me" marker: say nothing yet
+                t = held[0]
+                held_done[0] = True
             if not first_word and t.strip():
                 first_word.append(time.monotonic())
             said.append(t)
@@ -682,7 +745,8 @@ class Engine:
         self.events.reply_start()
         try:
             turn = self.agent.run_turn(
-                text, on_text=on_text, cancel=self.cancel, on_tool=on_tool, confirm=self.confirm
+                text + (NOT_ADDRESSED_NOTE if open_mic else ""), on_text=on_text, cancel=self.cancel,
+                on_tool=on_tool, confirm=self.confirm
             )
         except LLMError as e:
             self.events.error(str(e))
@@ -693,6 +757,20 @@ class Engine:
             self.current_source = ""
         interrupted = turn.stop_reason == "interrupted"
         answer = "".join(said).strip()
+        if held is not None and not held_done[0]:
+            leftover = (held[0] or "").strip()
+            if leftover and leftover != NO_REPLY and not leftover.startswith(NO_REPLY):
+                said.append(leftover)            # a very short real answer, held back above
+                self.events.reply_text(leftover)
+                say(chunker.feed(leftover))
+                answer = leftover
+            elif not interrupted:
+                # not meant for Fafnir: stay quiet and keep the conversation open
+                print(f"[voice] not for me, ignored: {text!r}", flush=True)
+                CONVERSATIONS.append("assistant", "(ignored: not addressed to Fafnir)")
+                self.events.reply_end(False, stats)
+                self._follow_up(self.cfg.voice.follow_up_seconds, tone=False)
+                return
         CONVERSATIONS.append("assistant", answer + (" [interrupted]" if interrupted else ""))
         if reply:
             reply(answer + (" [interrupted]" if interrupted else "") if answer else "(Done.)")
@@ -708,8 +786,10 @@ class Engine:
                 time.sleep(0.05)
             if self.speaker.first_audio_at is not None:
                 stats.first_audio = self.speaker.first_audio_at - started
-            if answer:  # keep listening briefly so the owner can just answer
+            if answer and ending:
+                self._conversation_over()      # "thanks, that's all": stop listening after the reply
+            elif answer:  # conversation mode: keep listening so the owner can just carry on
                 secs = self.cfg.voice.follow_up_seconds
-                self._follow_up(max(secs, 10) if secs > 0 and answer.endswith("?") else secs)
+                self._follow_up(max(secs, 15) if secs > 0 and answer.endswith("?") else secs)
         stats.cost = cost_line(self.agent.llm.usage, usage_before)[1:-1]
         self.events.reply_end(interrupted, stats)

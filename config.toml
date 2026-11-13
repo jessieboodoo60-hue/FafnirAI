@@ -126,9 +126,11 @@ engine = "whisper"
 sensitivity = 0.4            # 0-1: higher wakes more easily but false-triggers more
 end_silence_seconds = 0.8    # how long a pause means you've finished talking
 while_speaking = true        # say the wake word to cut Fafnir off mid-sentence
-# After Fafnir finishes speaking, keep listening this many seconds so you can just answer
-# (no wake word). Yes/no questions stay open until answered. 0 turns it off.
-follow_up_seconds = 4
+# Conversation mode: after each reply Fafnir keeps listening this many seconds, so you can
+# just carry on talking (no wake word); every exchange renews it. Noise doesn't end it, talk
+# that isn't meant for Fafnir is ignored, and "thanks, that's all" / "goodbye" ends it.
+# A soft falling tone means it has stopped listening. 0 turns it off.
+follow_up_seconds = 12
 
 [voice.stt]
 # Deepgram speech-to-text
