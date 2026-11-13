@@ -129,6 +129,8 @@ class Engine:
             except Exception as e:
                 self.wake_problem = f"Wake word off: couldn't open the microphone ({e})."
                 self.wake = None
+        print(f"[voice] wake word: {'on, cutoff ' + format(self.wake.spotter.threshold, '.2f') if self.wake else 'off'}"
+              f"{' - ' + self.wake_problem if self.wake_problem else ''}", flush=True)
         if self.wake_problem:
             self.events.notice(self.wake_problem)
 

@@ -121,3 +121,7 @@ Ask Fafnir to install or uninstall an app or game ("install Pokemon Reborn", "in
 ## Screen, mouse and keyboard
 
 Fafnir can see your monitors (main, right, above) and use the mouse and keyboard to do things that only work on screen: games, app menus, dialogs, websites and settings pages. It looks, acts, then checks the result. Move the mouse yourself at any time to take over; Fafnir stops. Risky on-screen actions you didn't directly ask for (deleting, sending, buying, uninstalling, changing settings) ask for your OK first, and it won't type passwords or card numbers unless you give them to it for that purpose.
+
+## Camera security system (Hikvision DVR)
+
+Fafnir can check your cameras ("show me the cameras", "what's happening at the gate?"), list cameras and disk health, search recordings, move pan-tilt-zoom cameras, open the DVR's live view, and change DVR settings. Add the DVR login to `.env` (`HIKVISION_HOST`, `HIKVISION_USERNAME`, `HIKVISION_PASSWORD`) and restart. Settings changes follow the normal confirmation rules; formatting disks, factory resets, firmware, users/passwords and reboots always ask first.

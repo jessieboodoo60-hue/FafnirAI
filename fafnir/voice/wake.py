@@ -162,7 +162,12 @@ class WakeWord:
         if burst_over or len(self._seg) >= self._check_len:
             seg, self._seg = self._seg, None
             self._pre.clear()
-            if self.spotter.matches(b"".join(seg)) and self.on_wake():
+            pcm = b"".join(seg)
+            score = self.spotter.score(pcm)
+            matched = score <= self.spotter.threshold
+            woke = matched and self.on_wake()
+            _log_wake(len(pcm) / (2 * RATE), score, self.spotter.threshold, matched, woke)
+            if woke:
                 self._begin(seg, still_talking=not burst_over)
             elif not burst_over:
                 self._ignore_until_quiet = True  # ordinary speech: wait for the next sentence
@@ -214,6 +219,19 @@ class WakeWord:
             w.writeframes(pcm)
         seconds = len(pcm) / (2 * RATE) if heard_speech else 0.0
         threading.Thread(target=self.on_done, args=(buf.getvalue(), seconds, self._opened), daemon=True).start()
+
+
+def _log_wake(seconds: float, score: float, threshold: float, matched: bool, woke: bool) -> None:
+    """One line per burst of speech the listener checked, for tuning (logs/wake.log)."""
+    from datetime import datetime
+    from ..config import ROOT
+    verdict = "WOKE" if woke else ("matched but ignored (busy)" if matched else "not the wake word")
+    try:
+        with open(ROOT / "logs" / "wake.log", "a", encoding="utf-8") as f:
+            f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} burst {seconds:.2f}s  score {score:6.2f}  "
+                    f"cutoff {threshold:6.2f}  {verdict}\n")
+    except OSError:
+        pass
 
 
 # ---- recording the owner's samples ---------------------------------------------------

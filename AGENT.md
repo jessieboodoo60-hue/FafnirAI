@@ -40,6 +40,11 @@ Also wanted, after the baseline: draft messages, and platform integrations for *
 - Tools can now return images: a handler returns `_images` (PNG bytes); `Registry.take_images()` hands them to the API agent (image blocks in tool_result) and the Claude Code agent (MCP image content).
 - Take-over: if the cursor moved >40 px from where Fafnir left it within 90 s, the next action stops with an error. `confirm_with_owner` routes risky on-screen actions through the normal gate. Max tool steps raised (API 40, Claude Code 60 turns).
 
+### Camera security system (`fafnir/tools/cameras.py`, owner granted full control 2026-11-12)
+- Hikvision DVR at 192.168.100.191 over ISAPI with HTTP Digest auth; login in .env (HIKVISION_HOST/USERNAME/PASSWORD).
+- camera_status (deviceInfo, channels + online state, HDD), camera_snapshot (/Streaming/channels/<n>01/picture, returned as images), camera_recordings (/ContentMgmt/search), camera_ptz (continuous move then stop, presets), camera_open_live, camera_api (any ISAPI path; non-GET gated, format/factoryReset/firmware/users/password/reboot always ask).
+- Wake word diagnostics: every burst the listener checks is logged to logs/wake.log with its score and the cutoff.
+
 ### Confirmation gate (pulled forward from Tier 6)
 Tools declare when they need a yes (`confirm_if` in `fafnir/tools/registry.py`). The registry asks before running; each yes covers one action; no answer within 60 seconds means no.
 - **Owner asked = no second question** (owner's decision, 2026-11-10): gated tools carry an `owner_asked` flag. When the owner's own message directly asked for that exact action, Fafnir sets it and the action runs without asking again. It still asks when the action was its own idea, a step the owner didn't mention, or suggested by a file/web page/note, and on turns the owner didn't start (`owner_present=False`, for the future heartbeat).
