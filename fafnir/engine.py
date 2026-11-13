@@ -87,6 +87,7 @@ class Engine:
         self.voice = voice and not cfg.voice.missing_keys()
         self.speaker = self.recorder = self.stt = self.ptt = None
         self._mic_want: str | None = None   # preferred mic in use (None = Windows default)
+        self._speaker_name = ""             # Windows' default speaker when the mic was chosen
         self.mic_name = ""                  # the mic being listened to, for displays
         self._audio_lock = threading.Lock()
         if self.voice:
@@ -125,7 +126,7 @@ class Engine:
     # ---- lifecycle ---------------------------------------------------------
     def start(self) -> None:
         threading.Thread(target=self._worker, daemon=True).start()
-        if self.voice and self.cfg.voice.mic_preference:
+        if self.voice and (self.cfg.voice.mic_preference or self.cfg.voice.mic_for_speaker):
             threading.Thread(target=self._watch_mics, daemon=True, name="mic-watch").start()
         if self.ptt:
             self.ptt.start()
@@ -151,32 +152,37 @@ class Engine:
                 pass
 
     # ---- microphone: headset when plugged in, otherwise the next one on the list ----
+    def _desired_mic(self) -> tuple[str | None, str, list[str]]:
+        """(mic to use, speaker Windows plays through, mics present) right now."""
+        from .voice import devices
+        v = self.cfg.voice
+        names, speaker = devices.live_input_names(), devices.default_output_name()
+        return devices.choose_for(speaker, list(v.mic_for_speaker), list(v.mic_preference), names), speaker, names
+
     def _pick_mic(self) -> None:
         """Choose the mic before any stream is open (startup)."""
         from .voice import devices
         try:
-            want = devices.choose(list(self.cfg.voice.mic_preference), devices.live_input_names())
+            want, self._speaker_name, _ = self._desired_mic()
             devices.refresh()
             self._mic_want, self.mic_name = want, devices.use_input(want)
-            print(f"[voice] microphone: {self.mic_name}", flush=True)
+            print(f"[voice] microphone: {self.mic_name} (speaker: {self._speaker_name})", flush=True)
         except Exception as e:
             print(f"[voice] couldn't choose a microphone: {e}", flush=True)
 
     def _watch_mics(self) -> None:
-        from .voice import devices
-        prefs = list(self.cfg.voice.mic_preference)
         while True:
             time.sleep(2)
             try:
-                names = devices.live_input_names()
-                want = devices.choose(prefs, names)
-                if want == self._mic_want:
+                want, speaker, names = self._desired_mic()
+                if want == self._mic_want and speaker == self._speaker_name:
                     continue
                 gone = self._mic_want is not None and self._mic_want not in names
                 busy = self.listening or (self.speaker and self.speaker.speaking)
                 if busy and not gone:
-                    continue  # a better mic appeared: switch once this exchange is over
-                self._switch_mic(want)
+                    continue  # switch once this exchange is over
+                self._speaker_name = speaker
+                self._switch_mic(want)  # also reopens the speaker stream on the new default
             except Exception as e:
                 print(f"[voice] microphone check failed: {e}", flush=True)
 
@@ -201,9 +207,9 @@ class Engine:
                         self.wake.start()
                     except Exception as e:
                         self.events.error(f"Wake word paused: couldn't open the microphone ({e}).")
-        print(f"[voice] microphone switched to: {self.mic_name}", flush=True)
-        label = next((p for p in self.cfg.voice.mic_preference if want and p.lower() in want.lower()),
-                     "Windows default")
+        print(f"[voice] microphone switched to: {self.mic_name} (speaker: {self._speaker_name})", flush=True)
+        parts = list(self.cfg.voice.mic_preference) + [m for _, m in self.cfg.voice.mic_for_speaker]
+        label = next((p for p in parts if want and p.lower() in want.lower()), "Windows default")
         self.events.notice(f"Microphone: {label}")
 
     # ---- state for displays ------------------------------------------------

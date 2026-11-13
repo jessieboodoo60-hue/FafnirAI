@@ -35,6 +35,37 @@ def live_input_names() -> list[str]:
     return names
 
 
+class _WaveOutCaps(ctypes.Structure):
+    _fields_ = _WaveInCaps._fields_ + [("dwSupport", ctypes.c_uint)]
+
+
+def default_output_name() -> str:
+    """The speaker Windows is playing through right now ('' if unknown)."""
+    if sys.platform != "win32":
+        return ""
+    winmm = ctypes.windll.winmm
+    dev, flags = ctypes.c_uint(), ctypes.c_uint()
+    # DRVM_MAPPER_PREFERRED_GET on WAVE_MAPPER: the id of the current default playback device
+    if winmm.waveOutMessage(ctypes.c_void_p(0xFFFFFFFF), 0x2015, ctypes.byref(dev), ctypes.byref(flags)):
+        return ""
+    caps = _WaveOutCaps()
+    if winmm.waveOutGetDevCapsW(dev.value, ctypes.byref(caps), ctypes.sizeof(caps)):
+        return ""
+    return caps.szPname
+
+
+def choose_for(speaker: str, rules: list[tuple[str, str]], preferences: list[str],
+               names: list[str]) -> str | None:
+    """The mic to use given the speaker in use: the first rule whose speaker matches (and whose
+    mic is plugged in) wins; otherwise the plain preference order."""
+    for spk, mic in rules:
+        if spk.strip() and spk.strip().lower() in speaker.lower():
+            found = choose([mic], names)
+            if found:
+                return found
+    return choose(preferences, names)
+
+
 def choose(preferences: list[str], names: list[str]) -> str | None:
     """The first preferred mic that's present, as its device name; None = Windows default."""
     for pref in preferences:

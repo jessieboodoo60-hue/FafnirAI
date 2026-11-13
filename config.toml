@@ -144,3 +144,9 @@ kokoro_lang = "en-us"
 voice_id = "43vS2JKzejLgSwmqF6gC"
 # eleven_flash_v2_5 = lowest latency; eleven_multilingual_v2 = richest quality, slower.
 model = "eleven_flash_v2_5"
+
+# Which mic to use for the speaker Windows is playing through (part of each name is enough).
+# Checked first; if no rule matches, or its mic isn't plugged in, mic_preference above is used.
+[voice.mic_for_speaker]
+"Primus" = "Primus Headset"
+"JBL" = "USB 2.0 Camera"
