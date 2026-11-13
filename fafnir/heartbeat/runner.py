@@ -146,7 +146,8 @@ class Heartbeat:
             self.tick()
 
     def tick(self) -> None:
-        if self.paused:
+        from .. import killswitch
+        if self.paused or killswitch.engaged():
             return
         now = datetime.now()
         for c in self.checks:

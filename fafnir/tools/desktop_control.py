@@ -102,6 +102,9 @@ class Desktop:
         return round(sx), round(sy)
 
     def _check_takeover(self) -> None:
+        from .. import killswitch
+        if killswitch.engaged():
+            raise ToolError("Kill switch is on: mouse and keyboard control stopped.")
         if self.last_pos is None or time.monotonic() - self.last_time > TAKEOVER_WINDOW:
             return
         cx, cy = self.mouse.position
@@ -192,8 +195,25 @@ class Desktop:
         return self._after(monitor, look_after, f"pressed {keys}" + (f" x{times}" if times and times > 1 else ""))
 
 
+def _let_go(d: "Desktop") -> None:
+    """Kill switch: release any mouse button or modifier key that might be held down."""
+    for b in (Button.left, Button.right, Button.middle):
+        try:
+            d.mouse.release(b)
+        except Exception:
+            pass
+    for k in (Key.shift, Key.ctrl, Key.alt, Key.cmd, Key.shift_r, Key.ctrl_r, Key.alt_r):
+        try:
+            d.keyboard.release(k)
+        except Exception:
+            pass
+    d.last_pos = None
+
+
 def register(reg: Registry) -> None:
     d = Desktop()
+    from .. import killswitch
+    killswitch.on_change(lambda on: _let_go(d) if on else None)
     mon = {"type": "string", "description": "Which monitor: main, right, above (or left/below/1/2/3). Default main."}
     look = {"type": "boolean", "description": "Take a screenshot afterwards to check the result. Default true."}
 

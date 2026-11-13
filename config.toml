@@ -108,6 +108,8 @@ mic_preference = ["Primus Headset", "USB 2.0 Camera"]
 # Outputs that are headphones (part of the name). On any other output (the JBL), the mic can
 # hear Fafnir, so it doesn't listen for its name while talking and ignores echoes of itself.
 headphones = ["Primus"]
+# Clean up the mic (WebRTC noise suppression + low-cut) before listening for the wake word.
+noise_suppression = true
 # Short beeps when recording starts and when Fafnir has heard you.
 cue_sounds = true
 # Print how long each stage took (transcribe, first audio).

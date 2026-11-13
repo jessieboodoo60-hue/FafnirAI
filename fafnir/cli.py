@@ -48,6 +48,15 @@ def main(argv: list[str] | None = None) -> int:
     if "--learn-key" in argv:
         from .voice.ptt import learn_key
         return learn_key()
+    if "--kill" in argv:
+        from . import killswitch
+        killswitch.engage("command line")
+        print("Kill switch ON. Release with: python main.py --release")
+        return
+    if "--release" in argv:
+        from . import killswitch
+        print("Kill switch released." if killswitch.release("command line") else "The kill switch wasn't on.")
+        return
     if "--backup" in argv:
         from .backup import main as backup_main
         return backup_main()

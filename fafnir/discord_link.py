@@ -165,9 +165,22 @@ class DiscordBridge:
             await self._voice_turn(message, voice)
             return
         low = text.lower()
+        from . import killswitch
+        if killswitch.is_kill_command(text):
+            killswitch.engage("Discord")
+            await message.channel.send("KILL SWITCH ON. Everything is stopped. Send /release to let me act again.")
+            return
+        if killswitch.is_release_command(text):
+            ok = killswitch.release("Discord")
+            await message.channel.send("Kill switch released. I'm back." if ok else "The kill switch wasn't on.")
+            return
+        if killswitch.engaged():
+            await message.channel.send(killswitch.MESSAGE.replace("Ctrl+Alt+Shift+K, or type /release", "/release"))
+            return
         if low in ("/help", "help"):
             await message.channel.send("Message me anything, like you'd say it at the PC. "
-                                       "/pause and /resume control notifications.")
+                                       "/pause and /resume control notifications. "
+                                       "/kill stops everything (emergency), /release undoes it.")
             return
         if low in ("/pause", "/resume"):
             from .tools import HEARTBEAT
@@ -198,6 +211,14 @@ class DiscordBridge:
             return
         if not text:
             await message.channel.send("I couldn't hear anything in that voice note.")
+            return
+        from . import killswitch
+        if killswitch.is_kill_command(text):
+            killswitch.engage("Discord voice note")
+            await message.channel.send("KILL SWITCH ON. Everything is stopped. Send /release to let me act again.")
+            return
+        if killswitch.engaged():
+            await message.channel.send(killswitch.MESSAGE.replace("Ctrl+Alt+Shift+K, or type /release", "/release"))
             return
         self.on_status(f"From your phone (voice): {text}")
         channel_id = message.channel.id

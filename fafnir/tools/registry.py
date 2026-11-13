@@ -138,6 +138,11 @@ class Registry:
         `owner_present` is False for turns the owner didn't start (e.g. the future
         heartbeat); then `owner_asked` is ignored and every gated action is confirmed.
         """
+        from .. import killswitch
+        if killswitch.engaged():
+            self._log(name, args, "blocked: kill switch is on", True, None)
+            return ("Blocked: the owner's kill switch is on, so no actions are allowed. "
+                    "Don't retry; tell the owner it's on."), True
         tool = self._tools.get(name)
         if tool is None:
             return f"No tool named '{name}'.", True

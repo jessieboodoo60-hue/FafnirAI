@@ -52,6 +52,14 @@ class _NeverDone:
     done = False
 
 
+def _drain_queue(q: queue.Queue) -> None:
+    try:
+        while True:
+            q.get_nowait()
+    except queue.Empty:
+        pass
+
+
 def mentions_name(text: str, name: str) -> bool:
     """Does a transcript start with something like the assistant's name? Speech recognition
     may spell an unusual name oddly ("Fafner", "Fav near"), so match loosely, and only in
@@ -122,6 +130,7 @@ class Engine:
                                  end_silence=v.wake_end_silence, name=self.name, engine=v.wake_engine,
                                  on_open=self._open_mic_heard)
             self.wake.is_muted = self._echo_risk
+            self.wake.clean_audio = v.noise_suppression
         except Exception as e:  # no recordings yet, or no mic
             self.wake = None
             self.wake_problem = f"Wake word off: {e}"
@@ -129,6 +138,7 @@ class Engine:
     # ---- lifecycle ---------------------------------------------------------
     def start(self) -> None:
         threading.Thread(target=self._worker, daemon=True).start()
+        self._start_killswitch()
         threading.Thread(target=self._warm_up, daemon=True, name="warm-up").start()
         if self.voice and (self.cfg.voice.mic_preference or self.cfg.voice.mic_for_speaker):
             threading.Thread(target=self._watch_mics, daemon=True, name="mic-watch").start()
@@ -182,6 +192,45 @@ class Engine:
         if len(heard) < 2:
             return False
         return sum(w in mine for w in heard) / len(heard) >= 0.7
+
+    # ---- emergency kill switch ----------------------------------------------------
+    def _start_killswitch(self) -> None:
+        from . import killswitch
+        killswitch.on_change(self._kill_changed)
+        try:
+            self._hotkeys = killswitch.Hotkeys()
+            self._hotkeys.start()
+        except Exception as e:
+            print(f"[kill switch] hotkeys unavailable: {e}", flush=True)
+
+        def watch() -> None:  # changes made by `python main.py --kill/--release`
+            while True:
+                time.sleep(1)
+                killswitch.sync()
+        threading.Thread(target=watch, daemon=True, name="kill-switch").start()
+        if killswitch.engaged():
+            self.events.error("Kill switch is ON (from before the restart): I won't do anything. "
+                              "Release with Ctrl+Alt+Shift+K or type /release.")
+
+    def _kill_changed(self, on: bool) -> None:
+        if on:
+            self.interrupt()
+            _drain_queue(self.turns)
+            self._window_gen += 1
+            if self.wake:
+                self.wake.close_window()
+            if self._confirm_answer is not None:
+                self._confirm_answer.put("no")
+            if self.recorder and self.recorder.recording:
+                try:
+                    self.recorder.stop()
+                except Exception:
+                    pass
+            _beep(300, 400)
+            self.events.error("KILL SWITCH ON: everything stopped. Release with Ctrl+Alt+Shift+K or type /release.")
+        else:
+            _beep(880, 120)
+            self.events.notice("Kill switch released. Fafnir can act again.")
 
     def _warm_up(self) -> None:
         """Load the voice model and connect to the brain now, not on the first request."""
@@ -318,6 +367,22 @@ class Engine:
         `reply(text)` is called with Fafnir's answer, for front ends elsewhere (the phone)."""
         text = text.strip()
         if not text:
+            return
+        from . import killswitch
+        if killswitch.is_kill_command(text):
+            killswitch.engage(f"owner ({source})")
+            if reply:
+                reply("KILL SWITCH ON. Everything is stopped.")
+            return
+        if killswitch.is_release_command(text) and not source.startswith("phone"):
+            ok = killswitch.release(f"owner ({source})")
+            if not ok:
+                self.events.notice("The kill switch wasn't on.")
+            return
+        if killswitch.engaged():
+            self.events.error(killswitch.MESSAGE)
+            if reply:
+                reply(killswitch.MESSAGE)
             return
         if self._confirm_answer is not None:
             self._confirm_answer.put(text)
@@ -559,6 +624,14 @@ class Engine:
                         if kind != "open_audio":  # a noise during a follow-up window: stay quiet
                             self.events.notice("Didn't catch that.")
                         continue
+                    from . import killswitch
+                    if killswitch.is_kill_command(text):
+                        self.events.heard(text)
+                        killswitch.engage("owner (voice)")
+                        continue
+                    if killswitch.engaged():
+                        self.events.error(killswitch.MESSAGE)
+                        continue
                     if kind in ("wake_audio", "open_audio") and self.on_loudspeaker() and self._is_own_echo(text):
                         print(f"[voice] ignored my own voice: {text!r}", flush=True)
                         continue
@@ -569,7 +642,8 @@ class Engine:
                     self.events.heard(text)
                 else:
                     text = payload
-                if self.cancel.is_set():
+                from . import killswitch
+                if self.cancel.is_set() or killswitch.engaged():
                     continue
                 self._run(text, started, stats, source=extra.get("source", "typed"), reply=extra.get("reply"))
             except Exception as e:  # never let the worker die

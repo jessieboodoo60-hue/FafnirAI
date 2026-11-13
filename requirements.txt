@@ -18,3 +18,5 @@ kokoro-onnx
 # Kokoro on the NVIDIA card (falls back to the processor without it); pulls ~1.7 GB of CUDA libraries
 onnxruntime-gpu[cuda,cudnn]
 soundfile
+# WebRTC audio processing (noise suppression) for the mic
+livekit
