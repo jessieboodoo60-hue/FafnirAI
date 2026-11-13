@@ -57,6 +57,16 @@ def main(argv: list[str] | None = None) -> int:
         from . import killswitch
         print("Kill switch released." if killswitch.release("command line") else "The kill switch wasn't on.")
         return
+    if "--restore-backup" in argv:
+        from .backup import restore_backup
+        i = argv.index("--restore-backup")
+        opt = lambda flag: argv[argv.index(flag) + 1] if flag in argv and argv.index(flag) + 1 < len(argv) else None
+        if i + 1 >= len(argv):
+            print("Usage: python main.py --restore-backup <file> [--to <folder>] [--key <recovery key>]")
+            return 1
+        r = restore_backup(argv[i + 1], to=opt("--to"), recovery_key=opt("--key"))
+        print(f"Restored {r['files']} files to {r['restored_to']}")
+        return 0
     if "--backup" in argv:
         from .backup import main as backup_main
         return backup_main()

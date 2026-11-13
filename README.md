@@ -58,7 +58,11 @@ Message it like you'd talk to it. Risky actions you ask for from the phone come 
 
 Fafnir remembers recent conversations across restarts: the app reopens with today's chat, and new conversations start knowing the last day or so. Ask "what did we talk about on Monday?" for older ones. The log is in `data\conversations\` (one file per day; delete any you like).
 
-Your personal data (`data\`, `.env`, `config.toml`) is zipped to `D:\FafnirBackups` once a day while the app runs, keeping the last 14 copies; you get a notice only if a backup fails. Run one by hand with `.venv\Scripts\python main.py --backup`. To restore, unzip the newest file into the project folder. The code itself is on GitHub.
+Your personal data (`data\`, `.env`, `config.toml`) is zipped to `D:\FafnirBackups` once a day while the app runs, keeping the last 14 copies; you get a notice only if a backup fails. Run one by hand with `.venv\Scripts\python main.py --backup`. The code itself is on GitHub.
+
+Backups are **encrypted** (AES-256; they hold your API keys and Google login) and saved as `fafnir-<date>.zip.enc`. The key lives in `dataault.key`, locked to your Windows account on this PC. A one-time copy is in `RECOVERY_KEY.txt`: move that key into a password manager or onto a USB stick, then delete the file. Without it, a backup can't be opened on another PC or after reinstalling Windows.
+
+Restore: `.venv\Scripts\python main.py --restore-backup D:\FafnirBackups\<file>` unpacks into a new `FafnirAI-restored-...` folder next to the project (it never overwrites live data); copy what you need back. Add `--key <recovery key>` on another PC, or `--to <folder>` to choose where.
 
 ## Heartbeat (Fafnir reaching out)
 
