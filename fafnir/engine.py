@@ -88,6 +88,7 @@ class Engine:
         self.speaker = self.recorder = self.stt = self.ptt = None
         self._mic_want: str | None = None   # preferred mic in use (None = Windows default)
         self._speaker_name = ""             # Windows' default speaker when the mic was chosen
+        self._off_mics: set[str] = set()    # present in Windows but silent (headset switched off)
         self.mic_name = ""                  # the mic being listened to, for displays
         self._audio_lock = threading.Lock()
         if self.voice:
@@ -157,6 +158,7 @@ class Engine:
         from .voice import devices
         v = self.cfg.voice
         names, speaker = devices.live_input_names(), devices.default_output_name()
+        names = [n for n in names if n not in self._off_mics]
         return devices.choose_for(speaker, list(v.mic_for_speaker), list(v.mic_preference), names), speaker, names
 
     def _pick_mic(self) -> None:
@@ -170,14 +172,38 @@ class Engine:
         except Exception as e:
             print(f"[voice] couldn't choose a microphone: {e}", flush=True)
 
+    def _check_off_mics(self, tick: int) -> None:
+        """Spot a mic that's switched off but still listed (wireless headset, dongle plugged in),
+        and notice when it comes back on."""
+        from .voice import devices
+        from .voice.wake import SILENT_PEAK
+        cur = self._mic_want
+        if (self.wake and cur and cur not in self._off_mics and not self.listening
+                and self.wake.silent_for() > 4):
+            self._off_mics.add(cur)
+            print(f"[voice] {cur} gives no sound (switched off?) - using another mic", flush=True)
+        if self._off_mics and tick % 5 == 0:  # every ~10 s
+            present = devices.live_input_names()
+            for name in list(self._off_mics):
+                try:
+                    if name not in present or devices.probe_peak(name) > SILENT_PEAK:
+                        self._off_mics.discard(name)
+                        print(f"[voice] {name} is giving sound again", flush=True)
+                except Exception:
+                    pass
+
     def _watch_mics(self) -> None:
+        tick = 0
         while True:
             time.sleep(2)
+            tick += 1
             try:
+                self._check_off_mics(tick)
                 want, speaker, names = self._desired_mic()
                 if want == self._mic_want and speaker == self._speaker_name:
                     continue
-                gone = self._mic_want is not None and self._mic_want not in names
+                gone = self._mic_want is not None and (self._mic_want not in names
+                                                       or self._mic_want in self._off_mics)
                 busy = self.listening or (self.speaker and self.speaker.speaking)
                 if busy and not gone:
                     continue  # switch once this exchange is over

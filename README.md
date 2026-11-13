@@ -112,7 +112,7 @@ Hold the talk key, speak, release. Press it again while Fafnir is talking to cut
 
 It asks you to say "Fafnir" 6 times. The recordings stay in `data\wake\` (not uploaded anywhere). If it triggers by mistake, lower `sensitivity` under `[voice.wake]` in `config.toml`; if it misses you, raise it or re-record.
 
-**Microphone:** the mic follows the speaker Windows is playing through: Primus headset as the output → Primus mic; JBL soundbar → camera mic. Fafnir's voice also moves to the new speaker. Rules are under `[voice.mic_for_speaker]` in `config.toml`. If no rule matches (or that mic isn't plugged in), `mic_preference` under `[voice]` decides: headset first, then camera. Checked every 2 seconds; a switch waits until the current exchange is over, unless the mic in use disappears.
+**Microphone:** the mic follows the speaker Windows is playing through: Primus headset as the output → Primus mic; JBL soundbar → camera mic. Fafnir's voice also moves to the new speaker. Rules are under `[voice.mic_for_speaker]` in `config.toml`. If no rule matches (or that mic isn't plugged in), `mic_preference` under `[voice]` decides: headset first, then camera. A mic that's listed but gives pure silence (headset switched off, dongle still plugged in) counts as unplugged after 4 seconds; Fafnir checks it again every 10 seconds and goes back to it when it gives sound. Checked every 2 seconds; a switch waits until the current exchange is over, unless the mic in use disappears.
 
 To set the talk key: in Razer Synapse, assign the M5 macro key to F13 (or any unused key), then run `.venv\Scripts\python main.py --learn-key`, press it, and copy the `ptt_key` line it prints into `config.toml`.
 

@@ -94,3 +94,14 @@ def use_input(name: str | None) -> str:
         return sd.query_devices(kind="input")["name"]
     except Exception:
         return "none"
+
+
+def probe_peak(name: str, seconds: float = 0.3) -> int:
+    """Loudest sample a mic gives over a short listen (0-1 = switched off / no signal)."""
+    import numpy as np
+    for i, dev in enumerate(sd.query_devices()):
+        if dev["hostapi"] == MME and dev["max_input_channels"] > 0 and dev["name"] == name:
+            a = sd.rec(int(16000 * seconds), samplerate=16000, channels=1, dtype="int16", device=i)
+            sd.wait()
+            return int(np.abs(a).max())
+    return 0

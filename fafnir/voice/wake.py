@@ -17,11 +17,13 @@ import wave
 from pathlib import Path
 from typing import Callable
 
+import numpy as np
 import sounddevice as sd
 
 from .kws import RATE, Spotter
 from .recorder import pcm_level
 
+SILENT_PEAK = 4                  # samples never above this = the mic is off (real mics hiss louder)
 FRAME = 512                      # 32 ms
 PRE_ROLL = 8                     # frames kept from just before speech starts (~0.25 s)
 SEGMENT_GAP = 0.3                # silence that ends a burst of speech during detection
@@ -73,6 +75,7 @@ class WakeWord:
     # ---- lifecycle -------------------------------------------------------------
     def start(self) -> None:
         self._running = True
+        self._last_sound = time.monotonic()
         threading.Thread(target=self._process, daemon=True, name="wake-word").start()
         self._stream = sd.RawInputStream(samplerate=RATE, channels=1, dtype="int16",
                                          blocksize=FRAME, callback=self._callback)
@@ -101,7 +104,14 @@ class WakeWord:
         return not self.capturing and time.monotonic() < self._open_until
 
     # ---- audio -------------------------------------------------------------------
+    def silent_for(self) -> float:
+        """Seconds since the mic last gave anything but digital silence (a switched-off
+        wireless headset whose dongle is still plugged in sends pure zeros)."""
+        return time.monotonic() - getattr(self, "_last_sound", time.monotonic())
+
     def _callback(self, indata, frames, time_info, status) -> None:
+        if np.abs(np.frombuffer(indata, dtype=np.int16)).max(initial=0) > SILENT_PEAK:
+            self._last_sound = time.monotonic()
         data = self._buf + bytes(indata)
         step = FRAME * 2
         while len(data) >= step:
