@@ -72,6 +72,7 @@ class VoiceConfig:
     wake_end_silence: float = 1.0   # seconds of quiet that end what you're saying
     wake_while_speaking: bool = True  # say the wake word to interrupt Fafnir mid-sentence
     follow_up_seconds: float = 6.0    # after Fafnir speaks, just talk (no wake word) for this long; 0 = off
+    mic_preference: tuple[str, ...] = ()  # mic names (or parts) in order of preference; first plugged-in wins
 
     def missing_keys(self) -> list[str]:
         missing = []
@@ -116,6 +117,7 @@ def _voice(raw: dict) -> VoiceConfig:
     tts = v.get("tts", {})
     return VoiceConfig(
         ptt_key=str(v.get("ptt_key", "f13")),
+        mic_preference=tuple(str(m) for m in v.get("mic_preference", [])),
         cue_sounds=bool(v.get("cue_sounds", True)),
         show_timings=bool(v.get("show_timings", True)),
         stt_model=stt.get("model", "nova-3"),

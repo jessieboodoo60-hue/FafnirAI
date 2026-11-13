@@ -91,8 +91,9 @@ class Speaker:
         self._audio: queue.Queue = queue.Queue()
         self.first_audio_at: float | None = None
         self._level = 0.0
-        self._out = sd.RawOutputStream(samplerate=PCM_RATE, channels=1, dtype="int16")
-        self._out.start()
+        self._out_lock = threading.Lock()   # held while writing; close_output() waits for it
+        self._out = None
+        self.open_output()
         threading.Thread(target=self._synth_loop, daemon=True).start()
         threading.Thread(target=self._play_loop, daemon=True).start()
 
@@ -111,6 +112,23 @@ class Speaker:
             self._idle.set()
         _drain(self._sentences)
         _drain(self._audio)
+
+    def open_output(self) -> None:
+        with self._out_lock:
+            if self._out is None:
+                self._out = sd.RawOutputStream(samplerate=PCM_RATE, channels=1, dtype="int16")
+                self._out.start()
+
+    def close_output(self) -> None:
+        """Close the speaker stream (before the audio device list is re-read)."""
+        with self._out_lock:
+            out, self._out = self._out, None
+        if out is not None:
+            try:
+                out.stop()
+                out.close()
+            except Exception:
+                pass
 
     @property
     def speaking(self) -> bool:
@@ -154,7 +172,12 @@ class Speaker:
                     break
                 piece = pcm[i : i + WRITE_BYTES]
                 self._level = pcm_level(piece)
-                self._out.write(piece)
+                with self._out_lock:
+                    if self._out is not None:
+                        try:
+                            self._out.write(piece)
+                        except Exception:
+                            pass  # device vanished mid-sentence; the mic watcher reopens it
             self._level = 0.0
 
     @property

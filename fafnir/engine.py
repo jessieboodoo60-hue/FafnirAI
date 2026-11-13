@@ -86,7 +86,11 @@ class Engine:
         self.current_source = ""            # where the turn in progress came from
         self.voice = voice and not cfg.voice.missing_keys()
         self.speaker = self.recorder = self.stt = self.ptt = None
+        self._mic_want: str | None = None   # preferred mic in use (None = Windows default)
+        self.mic_name = ""                  # the mic being listened to, for displays
+        self._audio_lock = threading.Lock()
         if self.voice:
+            self._pick_mic()
             from .voice.ptt import PushToTalk
             from .voice.recorder import Recorder
             from .voice.stt import DeepgramSTT
@@ -121,6 +125,8 @@ class Engine:
     # ---- lifecycle ---------------------------------------------------------
     def start(self) -> None:
         threading.Thread(target=self._worker, daemon=True).start()
+        if self.voice and self.cfg.voice.mic_preference:
+            threading.Thread(target=self._watch_mics, daemon=True, name="mic-watch").start()
         if self.ptt:
             self.ptt.start()
         if self.wake:
@@ -143,6 +149,62 @@ class Engine:
                 self.wake.stop()
             except Exception:
                 pass
+
+    # ---- microphone: headset when plugged in, otherwise the next one on the list ----
+    def _pick_mic(self) -> None:
+        """Choose the mic before any stream is open (startup)."""
+        from .voice import devices
+        try:
+            want = devices.choose(list(self.cfg.voice.mic_preference), devices.live_input_names())
+            devices.refresh()
+            self._mic_want, self.mic_name = want, devices.use_input(want)
+            print(f"[voice] microphone: {self.mic_name}", flush=True)
+        except Exception as e:
+            print(f"[voice] couldn't choose a microphone: {e}", flush=True)
+
+    def _watch_mics(self) -> None:
+        from .voice import devices
+        prefs = list(self.cfg.voice.mic_preference)
+        while True:
+            time.sleep(2)
+            try:
+                names = devices.live_input_names()
+                want = devices.choose(prefs, names)
+                if want == self._mic_want:
+                    continue
+                gone = self._mic_want is not None and self._mic_want not in names
+                busy = self.listening or (self.speaker and self.speaker.speaking)
+                if busy and not gone:
+                    continue  # a better mic appeared: switch once this exchange is over
+                self._switch_mic(want)
+            except Exception as e:
+                print(f"[voice] microphone check failed: {e}", flush=True)
+
+    def _switch_mic(self, want: str | None) -> None:
+        """Close every audio stream, re-read the device list, reopen on the new mic."""
+        from .voice import devices
+        with self._audio_lock:
+            if self.recorder and self.recorder.recording:
+                self.recorder.stop()
+            if self.wake:
+                self.wake.stop()
+            if self.speaker:
+                self.speaker.close_output()
+            try:
+                devices.refresh()
+                self._mic_want, self.mic_name = want, devices.use_input(want)
+            finally:
+                if self.speaker:
+                    self.speaker.open_output()
+                if self.wake:
+                    try:
+                        self.wake.start()
+                    except Exception as e:
+                        self.events.error(f"Wake word paused: couldn't open the microphone ({e}).")
+        print(f"[voice] microphone switched to: {self.mic_name}", flush=True)
+        label = next((p for p in self.cfg.voice.mic_preference if want and p.lower() in want.lower()),
+                     "Windows default")
+        self.events.notice(f"Microphone: {label}")
 
     # ---- state for displays ------------------------------------------------
     @property

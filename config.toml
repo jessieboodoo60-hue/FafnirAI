@@ -102,6 +102,9 @@ videos = 3               # watch comments on this many of your latest videos
 # Key to hold while talking. Run `python main.py --learn-key` and press the key
 # to see its code. Accepts a name ("ctrl_r", "f13"), a single character, or "vk:<number>".
 ptt_key = "f13"
+# Microphones in order of preference (part of the name is enough). Fafnir uses the first one
+# that's plugged in and switches by itself when you connect or unplug one. Empty = Windows default.
+mic_preference = ["Primus Headset", "USB 2.0 Camera"]
 # Short beeps when recording starts and when Fafnir has heard you.
 cue_sounds = true
 # Print how long each stage took (transcribe, first audio).

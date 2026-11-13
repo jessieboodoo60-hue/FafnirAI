@@ -112,6 +112,8 @@ Hold the talk key, speak, release. Press it again while Fafnir is talking to cut
 
 It asks you to say "Fafnir" 6 times. The recordings stay in `data\wake\` (not uploaded anywhere). If it triggers by mistake, lower `sensitivity` under `[voice.wake]` in `config.toml`; if it misses you, raise it or re-record.
 
+**Microphone:** Fafnir listens on your headset when it's plugged in and switches to the camera mic by itself when it isn't (checked every 2 seconds; a switch waits until Fafnir finishes the current exchange, unless the mic in use disappears). Change the order with `mic_preference` under `[voice]` in `config.toml`.
+
 To set the talk key: in Razer Synapse, assign the M5 macro key to F13 (or any unused key), then run `.venv\Scripts\python main.py --learn-key`, press it, and copy the `ptt_key` line it prints into `config.toml`.
 
 ## Installing and removing software
