@@ -57,6 +57,8 @@ class ClaudeCodeAgent:
         self.llm = _UsageHolder()
         self.history: list = []          # kept by Claude Code itself; here for interface parity
         self._client: ClaudeSDKClient | None = None
+        self._session_id: str | None = None   # to pick the conversation back up after a broken link
+        self._resume = False
         self._turn: dict[str, Any] = {}  # callbacks for the turn in progress
         # Claude Code must use its own login (the subscription), not the API key Fafnir loaded.
         os.environ.pop("ANTHROPIC_API_KEY", None)
@@ -110,6 +112,10 @@ class ClaudeCodeAgent:
             setting_sources=[],                    # ignore CLAUDE.md / user settings
             max_turns=60,
             cwd=os.path.expanduser("~"),
+            # camera/screen pictures come back inside one JSON message; the 1 MB default
+            # overflowed on a camera snapshot and killed the link
+            max_buffer_size=64 * 1024 * 1024,
+            resume=self._session_id if self._resume else None,
         )
 
     # ---- turns ------------------------------------------------------------------------
@@ -128,8 +134,18 @@ class ClaudeCodeAgent:
         if self._client is None:
             client = ClaudeSDKClient(options=self._options())
             await client.connect()
-            self._client = client
+            self._client, self._resume = client, False
         return self._client
+
+    async def _drop_client(self) -> None:
+        """The link to Claude Code broke: close it; the next turn reconnects and resumes."""
+        client, self._client = self._client, None
+        self._resume = self._session_id is not None
+        if client is not None:
+            try:
+                await asyncio.wait_for(client.disconnect(), 10)
+            except Exception:
+                pass
 
     async def _run(self, user_text, on_text, cancel, on_tool, confirm, owner_present) -> Reply:
         client = await self._ensure_client()
@@ -168,12 +184,19 @@ class ClaudeCodeAgent:
                             on_tool(block.name, None, None, False)
                 elif isinstance(msg, ResultMessage):
                     result = msg
+                    self._session_id = getattr(msg, "session_id", None) or self._session_id
+        except Exception as e:
+            await self._drop_client()
+            raise LLMError(f"Lost the link to Claude ({type(e).__name__}); reconnected - please say that again.")
         finally:
             watcher.cancel()
             self._turn = {}
 
         if result is not None:
             self._count(result)
+        elif not (cancel is not None and cancel.is_set()):
+            await self._drop_client()
+            raise LLMError("Lost the link to Claude; reconnected - please say that again.")
         if cancel is not None and cancel.is_set():
             return Reply(text="".join(parts), content=[], stop_reason="interrupted")
         if result is not None and result.is_error and result.subtype != "success":
@@ -196,6 +219,7 @@ class ClaudeCodeAgent:
                     await self._client.disconnect()
                 finally:
                     self._client = None
+            self._session_id, self._resume = None, False
         asyncio.run_coroutine_threadsafe(close(), self._loop).result(timeout=15)
 
 
