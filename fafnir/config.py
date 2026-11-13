@@ -73,7 +73,8 @@ class VoiceConfig:
     wake_while_speaking: bool = True  # say the wake word to interrupt Fafnir mid-sentence
     follow_up_seconds: float = 6.0    # after Fafnir speaks, just talk (no wake word) for this long; 0 = off
     mic_for_speaker: tuple[tuple[str, str], ...] = ()  # (speaker name part, mic name part)
-    mic_preference: tuple[str, ...] = ()  # mic names (or parts) in order of preference; first plugged-in wins
+    mic_preference: tuple[str, ...] = ()
+    headphones: tuple[str, ...] = ("Primus",)  # outputs the mic can't hear; anything else is a loudspeaker  # mic names (or parts) in order of preference; first plugged-in wins
 
     def missing_keys(self) -> list[str]:
         missing = []
@@ -119,6 +120,7 @@ def _voice(raw: dict) -> VoiceConfig:
     return VoiceConfig(
         ptt_key=str(v.get("ptt_key", "f13")),
         mic_for_speaker=tuple((str(k), str(m)) for k, m in v.get("mic_for_speaker", {}).items()),
+        headphones=tuple(str(h) for h in v.get("headphones", ["Primus"])),
         mic_preference=tuple(str(m) for m in v.get("mic_preference", [])),
         cue_sounds=bool(v.get("cue_sounds", True)),
         show_timings=bool(v.get("show_timings", True)),

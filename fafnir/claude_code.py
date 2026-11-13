@@ -94,7 +94,7 @@ class ClaudeCodeAgent:
                 text, is_error, images = await asyncio.get_running_loop().run_in_executor(self._pool, call)
             if t.get("on_tool"):
                 t["on_tool"](name, args, text, is_error)
-            content = [{"type": "image", "data": base64.b64encode(img).decode(), "mimeType": "image/png"}
+            content = [{"type": "image", "data": base64.b64encode(img).decode(), "mimeType": "image/jpeg" if img[:2] == bytes([0xFF, 0xD8]) else "image/png"}
                        for img in images] + [{"type": "text", "text": text}]
             return {"content": content, "is_error": is_error}
         return handle

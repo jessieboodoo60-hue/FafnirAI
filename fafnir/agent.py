@@ -88,7 +88,7 @@ class Agent:
                             on_tool(block.name, block.input, text, is_error)
                     images = [] if is_error else self.registry.take_images()
                     content = text if not images else (
-                        [{"type": "image", "source": {"type": "base64", "media_type": "image/png",
+                        [{"type": "image", "source": {"type": "base64", "media_type": "image/jpeg" if img[:2] == bytes([0xFF, 0xD8]) else "image/png",
                                                       "data": base64.b64encode(img).decode()}} for img in images]
                         + [{"type": "text", "text": text}])
                     results.append({"type": "tool_result", "tool_use_id": block.id,

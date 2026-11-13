@@ -90,6 +90,7 @@ class Speaker:
         self._sentences: queue.Queue = queue.Queue()
         self._audio: queue.Queue = queue.Queue()
         self.first_audio_at: float | None = None
+        self.last_played = 0.0   # when sound last went to the speaker (for echo handling)
         self._level = 0.0
         self._out_lock = threading.Lock()   # held while writing; close_output() waits for it
         self._out = None
@@ -176,6 +177,7 @@ class Speaker:
                     if self._out is not None:
                         try:
                             self._out.write(piece)
+                            self.last_played = time.monotonic()
                         except Exception:
                             pass  # device vanished mid-sentence; the mic watcher reopens it
             self._level = 0.0

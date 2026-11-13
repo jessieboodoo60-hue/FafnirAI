@@ -88,6 +88,7 @@ class Engine:
         self.speaker = self.recorder = self.stt = self.ptt = None
         self._mic_want: str | None = None   # preferred mic in use (None = Windows default)
         self._speaker_name = ""             # Windows' default speaker when the mic was chosen
+        self._last_said: tuple[str, float] = ("", 0.0)   # Fafnir's last spoken reply, for echo checks
         self._off_mics: set[str] = set()    # present in Windows but silent (headset switched off)
         self.mic_name = ""                  # the mic being listened to, for displays
         self._audio_lock = threading.Lock()
@@ -120,6 +121,7 @@ class Engine:
                                  on_wake=self._wake_detected, on_chunk=None, on_done=self._wake_done,
                                  end_silence=v.wake_end_silence, name=self.name, engine=v.wake_engine,
                                  on_open=self._open_mic_heard)
+            self.wake.is_muted = self._echo_risk
         except Exception as e:  # no recordings yet, or no mic
             self.wake = None
             self.wake_problem = f"Wake word off: {e}"
@@ -152,6 +154,34 @@ class Engine:
                 self.wake.stop()
             except Exception:
                 pass
+
+    # ---- Fafnir's own voice coming back through the mic (JBL soundbar + camera mic) ----
+    def on_loudspeaker(self) -> bool:
+        if not self._speaker_name:
+            try:
+                from .voice import devices
+                self._speaker_name = devices.default_output_name()
+            except Exception:
+                return True
+        return not any(h.lower() in self._speaker_name.lower() for h in self.cfg.voice.headphones)
+
+    def _echo_risk(self) -> bool:
+        """True while Fafnir is talking (or just stopped) through a speaker the mic can hear."""
+        if not self.speaker or not self.on_loudspeaker():
+            return False
+        return self.speaker.speaking or time.monotonic() - self.speaker.last_played < 0.8
+
+    def _is_own_echo(self, text: str) -> bool:
+        """Heard text that's mostly words Fafnir itself just said."""
+        said, when = self._last_said
+        if not said or time.monotonic() - when > 20:
+            return False
+        import re
+        heard = re.findall(r"[a-z']+", text.lower())
+        mine = set(re.findall(r"[a-z']+", said.lower()))
+        if len(heard) < 2:
+            return False
+        return sum(w in mine for w in heard) / len(heard) >= 0.7
 
     def _warm_up(self) -> None:
         """Load the voice model and connect to the brain now, not on the first request."""
@@ -326,7 +356,7 @@ class Engine:
             deadline = time.monotonic() + 180
             while self.speaker and self.speaker.speaking and time.monotonic() < deadline:
                 time.sleep(0.05)
-            time.sleep(0.35)  # let the room's echo of Fafnir's voice die down
+            time.sleep(0.8 if self.on_loudspeaker() else 0.35)  # let the echo of Fafnir's voice die down
             if gen == self._window_gen and self.wake and self.turns.empty():
                 self.wake.open_window(seconds)
 
@@ -529,6 +559,9 @@ class Engine:
                         if kind != "open_audio":  # a noise during a follow-up window: stay quiet
                             self.events.notice("Didn't catch that.")
                         continue
+                    if kind in ("wake_audio", "open_audio") and self.on_loudspeaker() and self._is_own_echo(text):
+                        print(f"[voice] ignored my own voice: {text!r}", flush=True)
+                        continue
                     if kind == "wake_audio" and not mentions_name(text, self.name):
                         # the local matcher fired but Deepgram didn't hear the name: a false alarm
                         self.events.notice("Ignored: that didn't sound like my name.")
@@ -593,6 +626,8 @@ class Engine:
             say(chunker.flush())
         if first_word:
             stats.first_word = first_word[0] - brain_start
+        if answer and not source.startswith("phone"):
+            self._last_said = (answer, time.monotonic() + 15)  # counts from roughly when speech ends
         if self.speaker and not interrupted and not source.startswith("phone"):
             deadline = time.monotonic() + 15
             while self.speaker.first_audio_at is None and self.speaker.speaking and time.monotonic() < deadline:

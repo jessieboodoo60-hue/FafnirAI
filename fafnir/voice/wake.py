@@ -46,10 +46,11 @@ class WakeWord:
             self.spotter = Spotter(samples_folder, sensitivity)
         else:
             from .whisper_wake import CHECK_SECONDS, WhisperSpotter
-            self.spotter = WhisperSpotter(name)
+            self.spotter = WhisperSpotter(name, sensitivity=sensitivity)
         self.name = name
         self.rate = RATE
         self.on_wake, self.on_chunk, self.on_done, self.on_open = on_wake, on_chunk, on_done, on_open
+        self.is_muted = None   # set by the engine: True while Fafnir's own voice may be in the mic
         self._open_until = 0.0          # monotonic time the follow-up window closes
         self._opened = False            # the current capture came from the follow-up window
         self.end_silence = end_silence
@@ -184,8 +185,14 @@ class WakeWord:
                 score = self.spotter.score(pcm)
                 matched, heard = score <= self.spotter.threshold, f"score {score:.2f} / cutoff {self.spotter.threshold:.2f}"
             else:
+                if self.is_muted and self.is_muted():
+                    _log_wake(len(pcm) / (2 * RATE), "(skipped: Fafnir is talking on the speakers)", False, False)
+                    if not burst_over:
+                        self._ignore_until_quiet = True
+                        self._seg_quiet_since = None
+                    return
                 matched, heard = self.spotter.check(pcm)
-                heard = repr(heard) if heard else "(nothing / not ready)"
+                heard = heard or "(nothing / not ready)"
             woke = matched and self.on_wake()
             _log_wake(len(pcm) / (2 * RATE), heard, matched, woke)
             if woke:

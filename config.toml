@@ -105,6 +105,9 @@ ptt_key = "f13"
 # Microphones in order of preference (part of the name is enough). Fafnir uses the first one
 # that's plugged in and switches by itself when you connect or unplug one. Empty = Windows default.
 mic_preference = ["Primus Headset", "USB 2.0 Camera"]
+# Outputs that are headphones (part of the name). On any other output (the JBL), the mic can
+# hear Fafnir, so it doesn't listen for its name while talking and ignores echoes of itself.
+headphones = ["Primus"]
 # Short beeps when recording starts and when Fafnir has heard you.
 cue_sounds = true
 # Print how long each stage took (transcribe, first audio).
@@ -118,7 +121,7 @@ enabled = true
 # "whisper" = a small offline speech recognizer listens for the name (works for any voice);
 # "samples" = matches recordings of your voice (python main.py --train-wake).
 engine = "whisper"
-sensitivity = 0.4            # "samples" only: higher catches more, but false-triggers more
+sensitivity = 0.4            # 0-1: higher wakes more easily but false-triggers more
 end_silence_seconds = 0.8    # how long a pause means you've finished talking
 while_speaking = true        # say the wake word to cut Fafnir off mid-sentence
 # After Fafnir finishes speaking, keep listening this many seconds so you can just answer
