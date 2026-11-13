@@ -33,12 +33,18 @@ class WakeWord:
     def __init__(self, samples_folder: Path, sensitivity: float,
                  on_wake: Callable[[], bool], on_chunk: Callable[[bytes], None] | None,
                  on_done: Callable[[bytes, float, bool], None], end_silence: float = 1.0,
-                 name: str = "Fafnir", on_open: Callable[[], bool] | None = None):
+                 name: str = "Fafnir", on_open: Callable[[], bool] | None = None,
+                 engine: str = "whisper"):
         """`on_wake()` returns False to ignore a detection (e.g. already recording).
         `on_chunk` gets live audio while capturing; `on_done(wav, seconds, open_mic)` gets the
         result. While a follow-up window is open (`open_window`), any speech is captured
         without the wake word, once `on_open()` agrees; `open_mic` is then True."""
-        self.spotter = Spotter(samples_folder, sensitivity)
+        self.engine = engine
+        if engine == "samples":
+            self.spotter = Spotter(samples_folder, sensitivity)
+        else:
+            from .whisper_wake import CHECK_SECONDS, WhisperSpotter
+            self.spotter = WhisperSpotter(name)
         self.name = name
         self.rate = RATE
         self.on_wake, self.on_chunk, self.on_done, self.on_open = on_wake, on_chunk, on_done, on_open
@@ -56,7 +62,8 @@ class WakeWord:
         self._buf = b""
         self._stream: sd.RawInputStream | None = None
         self._lock = threading.Lock()
-        self._check_len = int(self.spotter.max_len * 1.5 * 160 / FRAME) + PRE_ROLL  # frames
+        self._check_len = (int(self.spotter.max_len * 1.5 * 160 / FRAME) if engine == "samples"
+                           else int(CHECK_SECONDS * RATE / FRAME)) + PRE_ROLL  # frames
         # The audio callback only queues frames; a worker thread does the (slower) matching.
         # Time is measured in audio, not wall clock, so a slow match can't distort silences.
         self._queue: queue.Queue = queue.Queue()
@@ -163,10 +170,14 @@ class WakeWord:
             seg, self._seg = self._seg, None
             self._pre.clear()
             pcm = b"".join(seg)
-            score = self.spotter.score(pcm)
-            matched = score <= self.spotter.threshold
+            if self.engine == "samples":
+                score = self.spotter.score(pcm)
+                matched, heard = score <= self.spotter.threshold, f"score {score:.2f} / cutoff {self.spotter.threshold:.2f}"
+            else:
+                matched, heard = self.spotter.check(pcm)
+                heard = repr(heard) if heard else "(nothing / not ready)"
             woke = matched and self.on_wake()
-            _log_wake(len(pcm) / (2 * RATE), score, self.spotter.threshold, matched, woke)
+            _log_wake(len(pcm) / (2 * RATE), heard, matched, woke)
             if woke:
                 self._begin(seg, still_talking=not burst_over)
             elif not burst_over:
@@ -221,15 +232,14 @@ class WakeWord:
         threading.Thread(target=self.on_done, args=(buf.getvalue(), seconds, self._opened), daemon=True).start()
 
 
-def _log_wake(seconds: float, score: float, threshold: float, matched: bool, woke: bool) -> None:
+def _log_wake(seconds: float, heard: str, matched: bool, woke: bool) -> None:
     """One line per burst of speech the listener checked, for tuning (logs/wake.log)."""
     from datetime import datetime
     from ..config import ROOT
     verdict = "WOKE" if woke else ("matched but ignored (busy)" if matched else "not the wake word")
     try:
         with open(ROOT / "logs" / "wake.log", "a", encoding="utf-8") as f:
-            f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} burst {seconds:.2f}s  score {score:6.2f}  "
-                    f"cutoff {threshold:6.2f}  {verdict}\n")
+            f.write(f"{datetime.now():%Y-%m-%d %H:%M:%S} burst {seconds:.2f}s  heard {heard}  {verdict}\n")
     except OSError:
         pass
 

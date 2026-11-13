@@ -62,6 +62,7 @@ class VoiceConfig:
     # wake word ("Fafnir"): matched locally against the owner's recordings in data/wake/
     wake_enabled: bool = False
     wake_sensitivity: float = 0.5
+    wake_engine: str = "whisper"  # "whisper" (offline recognizer) or "samples" (voice recordings)
     wake_end_silence: float = 1.0   # seconds of quiet that end what you're saying
     wake_while_speaking: bool = True  # say the wake word to interrupt Fafnir mid-sentence
     follow_up_seconds: float = 6.0    # after Fafnir speaks, just talk (no wake word) for this long; 0 = off
@@ -119,6 +120,7 @@ def _voice(raw: dict) -> VoiceConfig:
         elevenlabs_api_key=os.environ.get("ELEVENLABS_API_KEY", "").strip(),
         wake_enabled=bool(v.get("wake", {}).get("enabled", False)),
         wake_sensitivity=float(v.get("wake", {}).get("sensitivity", 0.5)),
+        wake_engine=str(v.get("wake", {}).get("engine", "whisper")),
         wake_end_silence=float(v.get("wake", {}).get("end_silence_seconds", 1.0)),
         wake_while_speaking=bool(v.get("wake", {}).get("while_speaking", True)),
         follow_up_seconds=float(v.get("wake", {}).get("follow_up_seconds", 6.0)),

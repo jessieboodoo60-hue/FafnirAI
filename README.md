@@ -104,7 +104,7 @@ Add `DEEPGRAM_API_KEY` and `ELEVENLABS_API_KEY` to `.env`, then:
 
 Hold the talk key, speak, release. Press it again while Fafnir is talking to cut it off. Typing still works in voice mode, and typed replies are spoken too. `/stop` silences it, `/reset` clears the conversation.
 
-**Wake word:** say "Fafnir" instead of holding the key, then talk; Fafnir stops listening when you pause for a second. Say it while Fafnir is talking to cut it off. It runs entirely on this PC by comparing what you say with recordings of your own voice. Record them once (close the app first so the mic is free):
+**Wake word:** say "Fafnir" instead of holding the key, then talk; Fafnir stops listening when you pause for a second. Say it while Fafnir is talking to cut it off. It runs entirely on this PC: a small offline speech recognizer listens for the name (no voice recordings needed). Record them once (close the app first so the mic is free):
 
 ```
 .venv\Scripts\python main.py --train-wake

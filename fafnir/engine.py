@@ -112,7 +112,7 @@ class Engine:
             from .voice.wake import WakeWord
             self.wake = WakeWord(ROOT / "data" / "wake", v.wake_sensitivity,
                                  on_wake=self._wake_detected, on_chunk=None, on_done=self._wake_done,
-                                 end_silence=v.wake_end_silence, name=self.name,
+                                 end_silence=v.wake_end_silence, name=self.name, engine=v.wake_engine,
                                  on_open=self._open_mic_heard)
         except Exception as e:  # no recordings yet, or no mic
             self.wake = None
@@ -129,7 +129,7 @@ class Engine:
             except Exception as e:
                 self.wake_problem = f"Wake word off: couldn't open the microphone ({e})."
                 self.wake = None
-        print(f"[voice] wake word: {'on, cutoff ' + format(self.wake.spotter.threshold, '.2f') if self.wake else 'off'}"
+        print(f"[voice] wake word: {('on (' + self.wake.engine + ')') if self.wake else 'off'}"
               f"{' - ' + self.wake_problem if self.wake_problem else ''}", flush=True)
         if self.wake_problem:
             self.events.notice(self.wake_problem)
