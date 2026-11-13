@@ -14,6 +14,9 @@ name = "claude-sonnet-5-5"
 # Where the brain runs: "api" uses Anthropic API credit (pay per token);
 # "claude_code" uses your Claude subscription through the installed Claude Code app.
 provider = "claude_code"
+# "ollama" runs the brain on this PC (private, free). Settings are under [model.local] below.
+# With "ollama", the cloud brain named here is only used when you say yes to a hand-off.
+cloud_provider = "claude_code"
 max_tokens = 16000
 # low | medium | high | xhigh | max. Lower = faster and cheaper; raise for harder work.
 effort = "medium"
@@ -25,7 +28,23 @@ fallbacks = true
 max_retries = 3
 timeout_seconds = 120
 
+[model.local]
+# The local brain, served by Ollama (used when provider = "ollama").
+name = "qwen3:8b"
+# Context window. 4096 is what fits your 8 GB card at full speed (52-73 tokens/s measured);
+# bigger overflows into normal memory and drops to ~7 tokens/s.
+num_ctx = 4096
+# How many tools the model is offered per request (the router picks the most relevant).
+max_tools = 10
+# When a request needs pictures, web search or a long multi-step job:
+# "ask" = ask you each time before sending it to the cloud brain; "never" = stay local.
+cloud_fallback = "ask"
+keep_alive = "30m"
+
 [tools]
+# Your private documents (passport, IDs). Kept as one encrypted file in this folder; Fafnir
+# must ask you before every unlock, and locks it again after 5 minutes at most.
+private_folder = "C:/Personal Information"
 # Folder of Markdown/text notes that notes_search looks through. "~" = your home folder.
 notes_folder = "~/OneDrive/Documents"
 # Web search and page fetching (run by Anthropic; billed per search).

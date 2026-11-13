@@ -44,23 +44,23 @@ def build_agent(cfg: Config) -> Agent:
     def system_prompt() -> str:  # built at the start of each conversation, then frozen
         return build_system_prompt(cfg.assistant, memory.prompt_block(), CONVERSATIONS.prompt_block())
 
-    if cfg.model.provider == "claude_code":
-        from .claude_code import ClaudeCodeAgent
-        agent = ClaudeCodeAgent(
-            system_prompt,
-            build_registry(cfg, memory),
-            turn_context,
-            model=cfg.model.name,
-            effort=cfg.model.effort,
-        )
-        agent.registry.server_tools = []  # Claude Code brings its own web search/fetch
+    def cloud_agent(provider: str, registry):
+        if provider == "claude_code":
+            from .claude_code import ClaudeCodeAgent
+            agent = ClaudeCodeAgent(system_prompt, registry, turn_context,
+                                    model=cfg.model.name, effort=cfg.model.effort)
+            agent.registry.server_tools = []  # Claude Code brings its own web search/fetch
+        else:
+            agent = Agent(LLM(cfg.model, cfg.anthropic_api_key), system_prompt, registry,
+                          turn_context=turn_context)
         agent.memory = memory
         return agent
-    agent = Agent(
-        LLM(cfg.model, cfg.anthropic_api_key),
-        system_prompt,
-        build_registry(cfg, memory),
-        turn_context=turn_context,
-    )
-    agent.memory = memory
-    return agent
+
+    registry = build_registry(cfg, memory)
+    if cfg.model.provider == "ollama":
+        from .local_brain import LocalAgent
+        can_cloud = cfg.model.cloud_provider == "claude_code" or bool(cfg.anthropic_api_key)
+        agent = LocalAgent(cfg, registry, memory, turn_context,
+                           make_cloud=(lambda: cloud_agent(cfg.model.cloud_provider, registry)) if can_cloud else None)
+        return agent
+    return cloud_agent(cfg.model.provider, registry)

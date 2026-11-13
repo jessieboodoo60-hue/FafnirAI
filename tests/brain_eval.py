@@ -31,7 +31,15 @@ def main() -> int:
     only = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv else None
     cases = json.loads((ROOT / "tests" / "brain_cases.json").read_text(encoding="utf-8"))[:only]
     cfg = load_config()
+    import dataclasses
+    if "--provider" in sys.argv:   # test another brain without editing config.toml
+        prov = sys.argv[sys.argv.index("--provider") + 1]
+        cfg = dataclasses.replace(cfg, model=dataclasses.replace(cfg.model, provider=prov))
+    if "--model" in sys.argv:      # e.g. --model qwen3:4b-instruct (local brain only)
+        cfg = dataclasses.replace(cfg, local=dataclasses.replace(cfg.local, name=sys.argv[sys.argv.index("--model") + 1]))
     agent = build_agent(cfg)
+    if cfg.model.provider == "ollama":
+        cfg = dataclasses.replace(cfg, model=dataclasses.replace(cfg.model, name=cfg.local.name))
     label = f"{cfg.model.provider}:{cfg.model.name}"
     print(f"Brain under test: {label} | {len(cases)} cases | tools are recorded, never run\n")
 
@@ -48,6 +56,15 @@ def main() -> int:
         return "Test mode: recorded, not carried out. Stop now.", False
 
     agent.registry.run = fake_run
+    CLOUD_OK = {"WebSearch", "WebFetch", "web_search", "screen_look", "mouse_click", "camera_snapshot"}
+    cloud_asked: list[str] = []
+
+    def fake_confirm(action: str) -> bool:   # the local brain asking to hand off to the cloud
+        cloud_asked.append(action)
+        mark()
+        state["tools"].append("(asked to use the cloud)")
+        state["cancel"].set()
+        return False
 
     def on_tool(name, args, result, is_error) -> None:   # built-in web tools arrive here
         mark()
@@ -70,16 +87,21 @@ def main() -> int:
         state.update(tools=[], first=None, cancel=threading.Event(), t0=time.perf_counter())
         err = ""
         try:
-            r = agent.run_turn(c["say"], on_text=on_text, cancel=state["cancel"], on_tool=on_tool)
+            r = agent.run_turn(c["say"], on_text=on_text, cancel=state["cancel"], on_tool=on_tool,
+                               confirm=fake_confirm)
             text = (r.text or "").strip()
         except Exception as e:  # a failed turn is a failed case, not a crashed run
             text, err = "", f"{type(e).__name__}: {e}"
         total = time.perf_counter() - state["t0"]
         first_tool = state["tools"][0] if state["tools"] else None
-        ok = (first_tool in c["expect"]) if c["expect"] else (first_tool is None and bool(text))
+        handed = first_tool == "(asked to use the cloud)"
+        if handed:   # correct only where the request really needs pictures or the web
+            ok = bool(set(c["expect"]) & CLOUD_OK)
+        else:
+            ok = (first_tool in c["expect"]) if c["expect"] else (first_tool is None and bool(text))
         if ok and c.get("answer_has"):
             ok = c["answer_has"].lower() in text.lower()
-        rows.append({"say": c["say"], "expect": c["expect"], "first_tool": first_tool, "ok": ok,
+        rows.append({"say": c["say"], "expect": c["expect"], "first_tool": first_tool, "ok": ok, "cloud": handed,
                      "first_s": round(state["first"] if state["first"] is not None else total, 2),
                      "total_s": round(total, 2), "answer": text[:120], "error": err})
         got = first_tool or repr(text[:40]) or "(nothing)"
@@ -88,8 +110,11 @@ def main() -> int:
     firsts = sorted(r["first_s"] for r in rows)
     passed = sum(r["ok"] for r in rows)
     summary = {"brain": label, "date": time.strftime("%Y-%m-%d %H:%M"), "cases": len(rows), "passed": passed,
+               "handled_locally": sum(r["ok"] and not r["cloud"] for r in rows),
+               "handed_to_cloud": sum(r["cloud"] for r in rows),
                "first_response_median_s": firsts[len(firsts) // 2], "first_response_p90_s": firsts[int(len(firsts) * 0.9)],
                "first_response_worst_s": firsts[-1]}
+    print(f"handled locally and right: {summary['handled_locally']} | asked for the cloud: {summary['handed_to_cloud']}")
     print(f"\n{label}: {passed}/{len(rows)} passed | first response: median {summary['first_response_median_s']}s, "
           f"90% under {summary['first_response_p90_s']}s, worst {summary['first_response_worst_s']}s")
     if out:

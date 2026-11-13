@@ -32,7 +32,8 @@ class ModelConfig:
     max_retries: int
     timeout_seconds: float
     show_cost: bool = True
-    provider: str = "api"  # "api" (Anthropic API credit) or "claude_code" (Claude subscription)
+    provider: str = "api"  # "api" (Anthropic API credit), "claude_code" (Claude subscription) or "ollama" (local)
+    cloud_provider: str = "claude_code"  # which cloud brain the local one may hand off to
 
     @property
     def prices(self) -> dict:
@@ -87,11 +88,22 @@ class VoiceConfig:
 
 
 @dataclass(frozen=True)
+class LocalConfig:
+    """The local brain (provider = "ollama"): a model served by Ollama on this PC."""
+    name: str = "qwen3:8b"
+    num_ctx: int = 4096            # context window; 4k is what fits an 8 GB card at full speed
+    max_tools: int = 10            # tools offered to the model per request (picked by the router)
+    cloud_fallback: str = "ask"    # "ask" (owner says yes each time) | "never" | "always"
+    keep_alive: str = "30m"        # how long the model stays loaded after the last request
+
+
+@dataclass(frozen=True)
 class ToolsConfig:
     notes_folder: Path | None
     web: bool
     web_max_uses: int
     google: bool = True
+    private_folder: str = ""   # encrypted private documents; Fafnir must ask before every unlock
 
 
 @dataclass(frozen=True)
@@ -101,6 +113,7 @@ class Config:
     voice: VoiceConfig
     tools: ToolsConfig
     anthropic_api_key: str
+    local: LocalConfig = LocalConfig()
 
 
 def _tools(raw: dict) -> ToolsConfig:
@@ -111,6 +124,7 @@ def _tools(raw: dict) -> ToolsConfig:
         web=bool(t.get("web", True)),
         web_max_uses=int(t.get("web_max_uses", 5)),
         google=bool(t.get("google", True)),
+        private_folder=str(t.get("private_folder", "")).strip(),
     )
 
 
@@ -160,7 +174,7 @@ def load_config(path: Path | None = None) -> Config:
 
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     provider = str(raw.get("model", {}).get("provider", "api")).strip()
-    if not key and provider != "claude_code":
+    if not key and provider not in ("claude_code", "ollama"):
         raise ConfigError(
             "ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key."
         )
@@ -181,10 +195,13 @@ def load_config(path: Path | None = None) -> Config:
                 timeout_seconds=float(m.get("timeout_seconds", 120)),
                 show_cost=bool(m.get("show_cost", True)),
                 provider=provider,
+                cloud_provider=str(m.get("cloud_provider", "claude_code")),
             ),
             voice=_voice(raw),
             tools=_tools(raw),
             anthropic_api_key=key,
+            local=LocalConfig(**{k: v for k, v in m.get("local", {}).items()
+                                 if k in LocalConfig.__dataclass_fields__}),
         )
     except KeyError as e:
         raise ConfigError(f"config.toml is missing the setting {e}")

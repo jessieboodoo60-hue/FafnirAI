@@ -5,7 +5,7 @@ from ..config import ROOT, Config
 from ..conversations import ConversationLog
 from ..heartbeat.notices import NoticeStore
 from ..memory import MemoryStore
-from . import apps, business, cameras, computer, control, desktop_control, heartbeat_tools, installer, memory_tools, notes, screen_tools, weather
+from . import apps, business, cameras, computer, control, desktop_control, heartbeat_tools, installer, memory_tools, notes, private_vault, screen_tools, weather
 from .registry import Registry
 
 # Shared by the tools and the front ends: the notice inbox, and the running heartbeat
@@ -24,6 +24,7 @@ def build_registry(cfg: Config, memory: MemoryStore) -> Registry:
     installer.register(reg, NOTICES)          # install / uninstall software and games, then open them
     desktop_control.register(reg)             # see the screen, use the mouse and keyboard
     cameras.register(reg)                     # Hikvision DVR / security cameras
+    private_vault.register(reg, t.private_folder)   # encrypted passport/IDs: always asks before unlocking
     business.register(reg, ROOT / "data")
     computer.register(reg)
     apps.register(reg)
