@@ -458,6 +458,17 @@ class Engine:
 
         threading.Thread(target=wait_then_open, daemon=True).start()
 
+    def _stray_speech(self) -> None:
+        """Something was heard in the open-mic window that wasn't for Fafnir (noise, an echo, other
+        people talking). Keep listening once; after two in a row, stop until the wake word, so room
+        talk can't hold the mic open (and keep being sent out for transcription)."""
+        self._stray = getattr(self, "_stray", 0) + 1
+        if self._stray >= 2:
+            self._stray = 0
+            self._conversation_over()
+        else:
+            self._follow_up(self.cfg.voice.follow_up_seconds)
+
     def _conversation_over(self) -> None:
         """Stop listening without the wake word; a soft falling tone (if cue sounds are on)."""
         self._window_gen += 1
@@ -668,7 +679,7 @@ class Engine:
                     stats.transcribe = f"{time.monotonic() - started:.1f}s ({how})"
                     if not text:
                         if kind == "open_audio":  # a noise during the conversation: stay quiet, keep listening
-                            self._follow_up(self.cfg.voice.follow_up_seconds, tone=False)
+                            self._stray_speech()
                         else:
                             self.events.notice("Didn't catch that.")
                         continue
@@ -683,7 +694,7 @@ class Engine:
                     if kind in ("wake_audio", "open_audio") and self.on_loudspeaker() and self._is_own_echo(text):
                         print(f"[voice] ignored my own voice: {text!r}", flush=True)
                         if kind == "open_audio":
-                            self._follow_up(self.cfg.voice.follow_up_seconds, tone=False)
+                            self._stray_speech()
                         continue
                     if kind == "wake_audio" and not mentions_name(text, self.name):
                         # the local matcher fired but Deepgram didn't hear the name: a false alarm
@@ -769,7 +780,7 @@ class Engine:
                 print(f"[voice] not for me, ignored: {text!r}", flush=True)
                 CONVERSATIONS.append("assistant", "(ignored: not addressed to Fafnir)")
                 self.events.reply_end(False, stats)
-                self._follow_up(self.cfg.voice.follow_up_seconds, tone=False)
+                self._stray_speech()
                 return
         CONVERSATIONS.append("assistant", answer + (" [interrupted]" if interrupted else ""))
         if reply:
@@ -789,6 +800,7 @@ class Engine:
             if answer and ending:
                 self._conversation_over()      # "thanks, that's all": stop listening after the reply
             elif answer:  # conversation mode: keep listening so the owner can just carry on
+                self._stray = 0
                 secs = self.cfg.voice.follow_up_seconds
                 self._follow_up(max(secs, 15) if secs > 0 and answer.endswith("?") else secs)
         stats.cost = cost_line(self.agent.llm.usage, usage_before)[1:-1]
