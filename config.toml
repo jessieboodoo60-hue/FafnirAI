@@ -119,7 +119,7 @@ enabled = true
 # "samples" = matches recordings of your voice (python main.py --train-wake).
 engine = "whisper"
 sensitivity = 0.4            # "samples" only: higher catches more, but false-triggers more
-end_silence_seconds = 1.0    # how long a pause means you've finished talking
+end_silence_seconds = 0.8    # how long a pause means you've finished talking
 while_speaking = true        # say the wake word to cut Fafnir off mid-sentence
 # After Fafnir finishes speaking, keep listening this many seconds so you can just answer
 # (no wake word). Yes/no questions stay open until answered. 0 turns it off.

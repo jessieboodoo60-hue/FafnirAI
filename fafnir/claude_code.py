@@ -131,11 +131,18 @@ class ClaudeCodeAgent:
             raise LLMError(_friendly(e))
 
     async def _ensure_client(self) -> ClaudeSDKClient:
-        if self._client is None:
-            client = ClaudeSDKClient(options=self._options())
-            await client.connect()
-            self._client, self._resume = client, False
+        if getattr(self, "_connect_lock", None) is None:
+            self._connect_lock = asyncio.Lock()   # warm-up and a first request may race
+        async with self._connect_lock:
+            if self._client is None:
+                client = ClaudeSDKClient(options=self._options())
+                await client.connect()
+                self._client, self._resume = client, False
         return self._client
+
+    def warm_up(self) -> None:
+        """Start Claude Code and connect now (the first connect takes a few seconds)."""
+        asyncio.run_coroutine_threadsafe(self._ensure_client(), self._loop).result(timeout=60)
 
     async def _drop_client(self) -> None:
         """The link to Claude Code broke: close it; the next turn reconnects and resumes."""

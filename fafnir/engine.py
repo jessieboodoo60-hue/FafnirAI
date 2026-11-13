@@ -127,6 +127,7 @@ class Engine:
     # ---- lifecycle ---------------------------------------------------------
     def start(self) -> None:
         threading.Thread(target=self._worker, daemon=True).start()
+        threading.Thread(target=self._warm_up, daemon=True, name="warm-up").start()
         if self.voice and (self.cfg.voice.mic_preference or self.cfg.voice.mic_for_speaker):
             threading.Thread(target=self._watch_mics, daemon=True, name="mic-watch").start()
         if self.ptt:
@@ -151,6 +152,18 @@ class Engine:
                 self.wake.stop()
             except Exception:
                 pass
+
+    def _warm_up(self) -> None:
+        """Load the voice model and connect to the brain now, not on the first request."""
+        for name, fn in (("voice", getattr(self.speaker and self.speaker.tts, "warm_up", None)),
+                         ("brain", getattr(self.agent, "warm_up", None))):
+            if fn:
+                t = time.monotonic()
+                try:
+                    fn()
+                    print(f"[warm-up] {name} ready in {time.monotonic() - t:.1f}s", flush=True)
+                except Exception as e:
+                    print(f"[warm-up] {name}: {type(e).__name__}: {e}", flush=True)
 
     # ---- microphone: headset when plugged in, otherwise the next one on the list ----
     def _desired_mic(self) -> tuple[str | None, str, list[str]]:

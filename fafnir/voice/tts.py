@@ -195,6 +195,23 @@ def _drain(q: queue.Queue) -> None:
 
 
 # ---- Kokoro: offline speech (no API key) ---------------------------------------------------
+def _kokoro_session(model_path: str):
+    """Run Kokoro on the NVIDIA card when possible (~6x faster: a sentence in ~0.2 s instead
+    of 1-2 s), otherwise on the processor. The CUDA libraries come from pip (onnxruntime-gpu[cuda,cudnn])."""
+    import onnxruntime as ort
+    if "CUDAExecutionProvider" in ort.get_available_providers():
+        try:
+            if hasattr(ort, "preload_dlls"):
+                ort.preload_dlls()
+            s = ort.InferenceSession(model_path, providers=["CUDAExecutionProvider", "CPUExecutionProvider"])
+            if s.get_providers()[0] == "CUDAExecutionProvider":
+                print("[voice] Kokoro running on the graphics card", flush=True)
+                return s
+        except Exception as e:
+            print(f"[voice] Kokoro can't use the graphics card ({e}); using the processor", flush=True)
+    return ort.InferenceSession(model_path, providers=["CPUExecutionProvider"])
+
+
 class KokoroTTS:
     """Speech made on this PC with the Kokoro model (models/kokoro). Same interface as
     ElevenLabsTTS: stream_pcm() for the speaker, synth_ogg() for Discord voice notes.
@@ -219,8 +236,12 @@ class KokoroTTS:
                 model, voices = root / "kokoro-v1.0.onnx", root / "voices-v1.0.bin"
                 if not model.exists() or not voices.exists():
                     raise TTSError(f"Kokoro's model files are missing from {root}.")
-                cls._shared = Kokoro(str(model), str(voices))
+                cls._shared = Kokoro.from_session(_kokoro_session(str(model)), str(voices))
             return cls._shared
+
+    def warm_up(self) -> None:
+        """Load the model and run it once, so the first real sentence isn't slow."""
+        self._model().create("Ready.", voice=self._style(self._model()), speed=1.0, lang=self.lang)
 
     def _style(self, k):
         names = [v.strip() for v in self.voice.split("+") if v.strip()]
