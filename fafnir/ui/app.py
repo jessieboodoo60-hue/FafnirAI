@@ -1128,10 +1128,30 @@ def run_app(argv: list[str]) -> int:
                 links.append(link)
         except Exception as e:
             on_status(f"Phone link failed to start: {e}")
+    ops = None
+    try:
+        from .. import config_edit, killswitch
+        from ..heartbeat.notices import Notice
+        from ..ops import Ops, register_builtin
+        from ..server import hub
+        from ..tools import RESOURCES
+
+        def ops_notice(title: str, urgency: str) -> None:
+            NOTICES.add(Notice(key=f"ops:{title[:80]}:{datetime.now():%Y-%m-%d %H}", title=title, urgency=urgency, check="ops"))
+
+        ops = Ops(ROOT / "data" / "ops.db", notify=ops_notice, publish=hub.publish,
+                  settings=config_edit.read_all, killswitch_engaged=killswitch.engaged)
+        register_builtin(ops)
+        ops.start(workers=2)
+        RESOURCES["ops"] = ops
+        engine.ops = ops
+        print(f"[ops] job system running: autonomy level {ops.level}, budget ${ops.monthly_cap:.0f}/month", flush=True)
+    except Exception as e:
+        print(f"[ops] not started: {type(e).__name__}: {e}", flush=True)
     if _app_config_api().get("enabled", True):
         try:
             from ..server.api import start_in_background
-            start_in_background(engine, port=int(_app_config_api().get("port", 8790)))
+            start_in_background(engine, port=int(_app_config_api().get("port", 8790)), ops=ops)
         except Exception as e:
             print(f"[app api] not started: {type(e).__name__}: {e}", flush=True)
     health = getattr(engine, "health", None)

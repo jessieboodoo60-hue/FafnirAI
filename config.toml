@@ -222,3 +222,14 @@ anthropic_api = false
 stripe = false
 firebase = false
 tailscale = false
+
+[autonomy]
+# How much Fafnir's agents may do on their own: 1 research and recommend, 2 prepare work and ask,
+# 3 run approved workflows within limits, 4 low-risk reversible actions on their own. Spending,
+# paid campaigns, bulk outreach, contracts, moving money, publishing, deploying and deleting always ask.
+level = 1
+
+[budget]
+# Monthly cap for pay-per-use AI (Anthropic API, OpenAI, Gemini, Higgsfield...), in US dollars. Paid
+# calls are refused once it's reached. The Claude subscription and local models aren't counted.
+monthly_usd = 50

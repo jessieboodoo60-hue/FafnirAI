@@ -30,6 +30,8 @@ EDITABLE: dict[tuple[str, str], tuple[str, object, str]] = {
     ("voice.wake", "while_speaking"): ("bool", None, "now"),
     **{("integrations", p): ("bool", None, "now")
        for p in ("higgsfield", "gemini", "openai", "anthropic_api", "stripe", "firebase", "tailscale")},
+    ("autonomy", "level"): ("choice", [1, 2, 3, 4], "now"),
+    ("budget", "monthly_usd"): ("number", (0, 10000), "now"),
     ("app", "screen"): ("choice", ["right", "left", "above", "primary"], "restart"),
     ("app", "background"): ("text", None, "now"),
 }

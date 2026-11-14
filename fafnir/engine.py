@@ -904,4 +904,13 @@ class Engine:
                 secs = self.cfg.voice.follow_up_seconds
                 self._follow_up(max(secs, 15) if secs > 0 and answer.endswith("?") else secs)
         stats.cost = cost_line(self.agent.llm.usage, usage_before)[1:-1]
+        ops = getattr(self, "ops", None)
+        if ops is not None:
+            try:
+                usd = self.agent.llm.usage.minus(usage_before).dollars
+                prov = self.cfg.model.provider if not hasattr(self.agent, "use_model") else "ollama (local)"
+                ops.record_spend(prov, usd, role="assistant", billable=(prov == "api"),
+                                 note="subscription estimate" if prov == "claude_code" else "")
+            except Exception:
+                pass
         self.events.reply_end(interrupted, stats)

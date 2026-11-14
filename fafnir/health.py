@@ -185,6 +185,19 @@ class HealthMonitor:
                              "ready" if sp and sp._out is not None else "the speaker stream is closed"))
             stt = e.stt
             rows.append(_row("Speech recognition", OK, "local (Whisper)" if hasattr(stt, "transcribe_pcm") else "cloud (Deepgram)"))
+        ops = getattr(e, "ops", None)
+        if ops is not None:
+            s = ops.summary()
+            failed = s["jobs"].get("failed", 0)
+            rows.append(_row("Job system", WARN if s["suspended_roles"] else OK,
+                             f"level {s['autonomy_level']}, {s['jobs'].get('queued', 0) + s['jobs'].get('retrying', 0)} waiting, "
+                             f"{failed} failed in total" + (f"; paused: {', '.join(s['suspended_roles'])}" if s["suspended_roles"] else "")))
+            b = s["budget"]
+            pct = b["spent_usd"] / b["cap_usd"] if b["cap_usd"] else 0
+            rows.append(_row("AI budget", FAIL if pct >= 1 else WARN if pct >= 0.8 else OK,
+                             f"${b['spent_usd']:.2f} of ${b['cap_usd']:.0f} this month", round(pct * 100)))
+            if s["pending_approvals"]:
+                rows.append(_row("Waiting for your OK", WARN, f"{s['pending_approvals']} request(s)", s["pending_approvals"]))
         res = getattr(e, "resources", None)
         if res is not None:
             rows.append(_row("Performance profile", OK, f"{res.profile.replace('_', ' ') or 'starting'} ({res.why})"))

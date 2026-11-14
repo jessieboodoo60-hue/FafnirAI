@@ -73,7 +73,38 @@ integration switches, the live feed, rate limiting). Also checked against the ru
 temporary read-only account: sign-in, status, Right Now, refusals, live feed, and that the port is not
 reachable from the home network.
 
-## Not in stage 1
+## Stage 2: jobs, approvals, budget, autonomy (`fafnir/ops.py`)
+
+Everything the future agents do will run as **jobs** in `data/ops.db`:
+
+- **Event-driven:** workers sleep until a job is due or one is added; no loop calls a model when there's nothing to do.
+- **No double actions:** a job can carry an idempotency key (for example `invoice-42`); the same key is never queued twice, and scheduled jobs use the time slot as their key.
+- **Crash-safe:** a job that was running when Fafnir stopped goes back in the queue at the next start; long jobs save checkpoints and resume from them.
+- **Retries:** network-type failures retry after about 30 s, 60 s, 120 s... (up to 1 h), then the job is marked failed and you get a notice. Errors retrying won't fix fail at once.
+- **Approval queue:** a job that reaches a sensitive step waits in the queue (app, desktop or phone) and carries on only after your yes; a no cancels it; unanswered requests expire after 7 days.
+- **Autonomy levels** (Settings, `[autonomy]`, or the API): 1 research and recommend (the default), 2 prepare and ask, 3 run approved work within limits, 4 low-risk reversible actions alone. Spending, paid campaigns, bulk outreach, contracts, moving money, changing financial accounts, publishing, deploying, deleting data and legal matters **always** ask, at every level.
+- **Budget:** US$50 a month by default (Settings, `[budget]`, or the API). Checked **before** each paid call; refused once reached; you're told at 80% and 100%. Tracked per provider, role, client and project. Only pay-per-use services count; your Claude subscription and the local models don't.
+- **Automatic suspension:** a role whose jobs fail 3 times within an hour, or that hits its own budget, is paused until you resume it. The kill switch pauses every worker.
+- **Daily report** at 08:00: jobs done and failed, what's waiting for you, spending, the autonomy level. Built from the records, no AI call, no cost.
+
+| Route | Needs | What |
+|---|---|---|
+| `GET /api/ops` | read | level, job counts, pending approvals, budget, paused roles |
+| `GET /api/jobs`, `GET /api/jobs/{id}` | read | jobs and their results, errors, checkpoints |
+| `POST /api/jobs/{id}/cancel` | control | cancel a waiting job |
+| `GET /api/approvals`, `POST /api/approvals/{id}` | read / control | Fafnir's current question (`current`) and queued requests (numbers) |
+| `GET /api/budget`, `PUT /api/budget` | read / admin | spending this month; change the cap |
+| `GET /api/autonomy`, `PUT /api/autonomy` | read / admin | the level and what always needs approval |
+| `GET /api/roles`, `POST /api/roles/{role}/resume` | read / control | roles, their spend, paused ones |
+| `GET /api/schedules` | read | scheduled jobs |
+
+Tests: `.venv\Scripts\python -m pytest tests -q` (18 job-system tests plus the 15 API tests). They cover results,
+duplicates, backoff, giving up, permanent errors, crash recovery with checkpoints, approval wait and
+resume, rejection, always-approve at level 4, autonomy gating, budget refusal before the call, what
+counts as billable, role budgets and failure suspension, the kill switch, schedules firing once per
+slot, cancelling, expiry, and the free daily report.
+
+## Not yet built
 
 A persistent approval queue (today only the one question Fafnir is currently asking), agents, business
 data, push notifications, and remote access. Those are stages 2 to 6.

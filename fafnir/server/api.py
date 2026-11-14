@@ -54,12 +54,20 @@ class Toggle(BaseModel):
     enabled: bool
 
 
+class Budget(BaseModel):
+    monthly_usd: float = Field(ge=0, le=10000)
+
+
+class Level(BaseModel):
+    level: int = Field(ge=1, le=4)
+
+
 def _log(what: str, who: str = "", ok: bool = True) -> None:
     audit.record({"time": datetime.now().isoformat(timespec="seconds"), "tool": "APP_API",
                   "result": f"{what}" + (f" ({who})" if who else ""), "error": not ok})
 
 
-def create_app(store: AuthStore, engine=None, health=None) -> FastAPI:
+def create_app(store: AuthStore, engine=None, health=None, ops=None) -> FastAPI:
     app = FastAPI(title="FafnirAI", docs_url=None, redoc_url=None, openapi_url=None)
     calls: dict[str, list[float]] = {}
 
@@ -195,20 +203,100 @@ def create_app(store: AuthStore, engine=None, health=None) -> FastAPI:
             return {"reply": None, "note": "Still working; the answer will arrive on the live feed."}
         return {"reply": box["text"]}
 
+    def need_ops():
+        if ops is None:
+            raise HTTPException(503, "The job system isn't running.")
+        return ops
+
     @app.get("/api/approvals")
     def approvals(p: Principal = Depends(need("read"))):
-        e = need_engine()
-        return {"pending": [{"id": "current", "action": e.pending_confirm}] if e.pending_confirm else []}
+        """Everything waiting for the owner: the question Fafnir is asking right now (id "current"),
+        then queued requests from jobs (numeric ids)."""
+        pending = []
+        if engine is not None and engine.pending_confirm:
+            pending.append({"id": "current", "kind": "question", "title": engine.pending_confirm, "by": "Fafnir"})
+        if ops is not None:
+            pending += [{"id": a["id"], "kind": a["kind"], "title": a["title"], "detail": a["detail"],
+                         "by": a["requested_by"], "created": a["created"], "expires": a["expires"]} for a in ops.approvals()]
+        return {"pending": pending}
 
     @app.post("/api/approvals/{aid}")
     def decide(aid: str, body: Approve, p: Principal = Depends(need("control"))):
-        e = need_engine()
-        if aid != "current" or not e.pending_confirm:
-            raise HTTPException(404, "Nothing is waiting for approval.")
-        action = e.pending_confirm
-        e.answer_confirm(body.approve)
+        if aid == "current":
+            e = need_engine()
+            if not e.pending_confirm:
+                raise HTTPException(404, "Nothing is waiting for approval.")
+            action = e.pending_confirm
+            e.answer_confirm(body.approve)
+        else:
+            from ..ops import Refused
+            try:
+                out = need_ops().decide(int(aid), body.approve, who=f"app ({p.username})")
+            except (ValueError, Refused) as ex:
+                raise HTTPException(404, str(ex))
+            action = f"request {aid} -> {out['status']}"
         _log(("approved" if body.approve else "declined") + f" from the app: {action[:80]}", p.username)
         return {"ok": True, "approved": body.approve}
+
+    @app.get("/api/ops")
+    def ops_summary(p: Principal = Depends(need("read"))):
+        return need_ops().summary()
+
+    @app.get("/api/jobs")
+    def jobs(status: str | None = None, p: Principal = Depends(need("read"))):
+        return {"jobs": need_ops().jobs(status)}
+
+    @app.get("/api/jobs/{job_id}")
+    def job(job_id: int, p: Principal = Depends(need("read"))):
+        j = need_ops().job(job_id)
+        if not j:
+            raise HTTPException(404, "No such job.")
+        return j
+
+    @app.post("/api/jobs/{job_id}/cancel")
+    def cancel_job(job_id: int, p: Principal = Depends(need("control"))):
+        if not need_ops().cancel(job_id, who=f"app ({p.username})"):
+            raise HTTPException(409, "That job can't be cancelled now (finished, failed or running).")
+        _log(f"cancelled job {job_id}", p.username)
+        return {"ok": True}
+
+    @app.get("/api/budget")
+    def budget(p: Principal = Depends(need("read"))):
+        return need_ops().budget()
+
+    @app.put("/api/budget")
+    def set_budget(body: Budget, p: Principal = Depends(need("admin"))):
+        from .. import config_edit
+        config_edit.set_value("budget", "monthly_usd", float(body.monthly_usd))
+        _log(f"monthly AI budget set to ${body.monthly_usd:.2f}", p.username)
+        return need_ops().budget()
+
+    @app.get("/api/autonomy")
+    def autonomy(p: Principal = Depends(need("read"))):
+        from ..ops import ALWAYS_APPROVE, LEVELS
+        o = need_ops()
+        return {"level": o.level, "levels": LEVELS, "always_need_approval": sorted(ALWAYS_APPROVE)}
+
+    @app.put("/api/autonomy")
+    def set_autonomy(body: Level, p: Principal = Depends(need("admin"))):
+        from .. import config_edit
+        config_edit.set_value("autonomy", "level", body.level)
+        _log(f"autonomy level set to {body.level}", p.username)
+        return {"level": need_ops().level}
+
+    @app.get("/api/roles")
+    def roles(p: Principal = Depends(need("read"))):
+        return {"roles": need_ops().roles()}
+
+    @app.post("/api/roles/{role}/resume")
+    def resume_role(role: str, p: Principal = Depends(need("control"))):
+        need_ops().resume_role(role)
+        _log(f"resumed role {role}", p.username)
+        return {"ok": True}
+
+    @app.get("/api/schedules")
+    def schedules(p: Principal = Depends(need("read"))):
+        return {"schedules": need_ops().schedules()}
 
     @app.post("/api/killswitch")
     def kill(body: KillSwitch, p: Principal = Depends(need("control"))):
@@ -275,14 +363,14 @@ def create_app(store: AuthStore, engine=None, health=None) -> FastAPI:
 
 
 # ---- running it inside Fafnir ------------------------------------------------------------------
-def start_in_background(engine, port: int = 8790, db: Path | None = None) -> threading.Thread | None:
+def start_in_background(engine, port: int = 8790, db: Path | None = None, ops=None) -> threading.Thread | None:
     """Start the API on 127.0.0.1:<port> in a background thread, wired to the live engine."""
     import uvicorn
 
     from ..config import ROOT
     store = AuthStore(db or ROOT / "data" / "app_users.db")
     hub.tee_engine_events(engine)
-    app = create_app(store, engine)
+    app = create_app(store, engine, ops=ops)
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", access_log=False,
                             ws_ping_interval=20, ws_ping_timeout=20)
     server = uvicorn.Server(config)

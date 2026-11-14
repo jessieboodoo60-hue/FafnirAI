@@ -71,3 +71,4 @@ coordinated by one orchestrator; most of them only wake up when there is work.
 ## Progress
 
 - **Stage 1 done (2026-11-14):** the app API (accounts with scrypt passwords and a required authenticator code for owners, rotating refresh tokens with reuse detection, lockout, roles, rate limits, live WebSocket feed, chat, approvals, kill switch, health, Right Now) on 127.0.0.1:8790, plus integration switches that stay off until a key exists. 15 automated tests and a live check. Details: docs/APP_API.md.
+- **Stage 2 done (2026-11-14):** persistent jobs with idempotency keys, leases, crash recovery, checkpoints, exponential backoff and schedules; approval queue with expiry; US$50 monthly budget checked before paid calls; autonomy levels 1-4 with an always-approve list; automatic role suspension; kill switch pauses workers; free daily report. 18 tests plus a live check.

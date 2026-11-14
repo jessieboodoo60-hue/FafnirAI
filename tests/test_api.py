@@ -176,7 +176,7 @@ def test_approvals_and_kill_switch(env):
     tok = login(client, secret).json()["access_token"]
     assert client.get("/api/approvals", headers=bearer(tok)).json()["pending"] == []
     eng.pending_confirm = "Send the email to Sam."
-    assert client.get("/api/approvals", headers=bearer(tok)).json()["pending"][0]["action"] == "Send the email to Sam."
+    assert client.get("/api/approvals", headers=bearer(tok)).json()["pending"][0]["title"] == "Send the email to Sam."
     assert client.post("/api/approvals/current", json={"approve": False}, headers=bearer(tok)).json()["approved"] is False
     assert eng.answers == [False]
     assert client.post("/api/killswitch", json={"engage": True}, headers=bearer(tok)).json()["kill_switch"] is True

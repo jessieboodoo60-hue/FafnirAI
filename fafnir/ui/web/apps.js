@@ -237,6 +237,11 @@ const RENDER = {
         ${row("Wallpaper", `<div class="swatches">${sw.map(([k, g, n]) => `<button class="swatch ${wp === k ? "on" : ""}" data-wp="${k}" style="background:${g}" title="${n}"></button>`).join("")}</div>`)}
         ${row("Your own picture", `<input class="field set-text" data-k="app.background" placeholder="C:/Users/you/Pictures/wall.jpg" value="${esc(v["app.background"] || "")}" style="max-width:320px">`)}
         ${row("Monitor", seg("app.screen", [["right", "Right"], ["left", "Left"], ["above", "Above"], ["primary", "Main"]]), "app.screen")}</div>
+      <div class="sec">Autonomy and budget</div><div class="set-group">
+        ${row(`How much Fafnir's agents may do on their own<div class="set-note">1 research and recommend · 2 prepare and ask · 3 run approved work within limits · 4 low-risk reversible actions alone. Spending, contracts, payments, publishing, deleting and bulk outreach always ask.</div>`,
+          seg("autonomy.level", [[1, "1 Research"], [2, "2 Assisted"], [3, "3 Supervised"], [4, "4 Controlled"]]))}
+        ${row(`Monthly AI budget (US$) <span class="k" id="bud-val">${v["budget.monthly_usd"] ?? 50}</span><div class="set-note">Pay-per-use services stop when it's reached. Your Claude subscription and local models don't count.</div>`,
+          `<input type="range" class="slider set-slider" data-k="budget.monthly_usd" min="0" max="300" step="5" value="${v["budget.monthly_usd"] ?? 50}">`)}</div>
       <div class="sec">Integrations · off until you turn them on</div><div class="set-group">
         ${(C.integrations || []).map((it) => row(`${esc(it.name)}<div class="set-note">${esc(it.purpose)}${it.ready ? "" : " · " + esc(it.detail) + ". " + esc(it.how)}</div>`,
           `<button class="switch ${it.switch ? "on" : ""} ${it.ready ? "" : "off-ready"}" data-int="${esc(it.id)}" title="${it.ready ? "" : "Add its key first"}"></button>`)).join("")}</div>
@@ -262,7 +267,7 @@ const RENDER = {
       it.switch = r.data.value; it.active = it.switch && it.ready; RENDER.settings(w);
     }));
     w.body.querySelectorAll(".set-slider").forEach((s) => {
-      const lbl = s.dataset.k.endsWith("seconds") ? "#fu-val" : "#sens-val";
+      const lbl = s.dataset.k.endsWith("seconds") ? "#fu-val" : s.dataset.k.startsWith("budget") ? "#bud-val" : "#sens-val";
       s.oninput = () => (w.body.querySelector(lbl).textContent = s.dataset.k.endsWith("seconds") ? s.value + "s" : s.value);
       s.onchange = () => save(s.dataset.k, +s.value); });
     w.body.querySelectorAll(".set-text").forEach((t) => t.addEventListener("keydown", (e) => { if (e.key === "Enter") save(t.dataset.k, t.value.trim()); }));
