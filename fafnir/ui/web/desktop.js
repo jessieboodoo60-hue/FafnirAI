@@ -436,7 +436,8 @@ document.addEventListener("keydown", (e) => {
 /* ---------------- Right-now widget ---------------- */
 function renderNow() {
   $("#now-briefing").textContent = S.briefing || "All clear.";
-  $("#now-items").innerHTML = S.nowItems.slice(0, 5).map((i) => `<li class="tag-${esc(i.tag)}"><span class="ic">${esc(i.icon)}</span><span class="t">${esc(i.title)}</span><span class="d">${esc(i.detail)}</span></li>`).join("");
+  $("#now-items").innerHTML = S.nowItems.slice(0, 5).map((i) => `<li class="tag-${esc(i.tag)}" title="Click to show all"><span class="ic">${esc(i.icon)}</span><span class="t">${esc(i.title)}</span><span class="d">${esc(i.detail)}</span></li>`).join("");
+  $("#now-items").querySelectorAll("li").forEach((li) => (li.onclick = () => li.classList.toggle("open")));   // expand / collapse
 }
 
 /* ---------------- messages from Python ---------------- */

@@ -357,6 +357,7 @@ class DesktopWindow(QWebEngineView):
         self.profile = QWebEngineProfile("fafnir", QApplication.instance())
         self.profile.setPersistentStoragePath(str(ROOT / "data" / "web"))
         self.profile.setCachePath(str(ROOT / "data" / "web" / "cache"))
+        self.profile.clearHttpCache()   # always load the current desktop.css/js after an update (saved layout is kept)
         self.setPage(QWebEnginePage(self.profile, self))
         self.restart_needed = False
         self.restart_hook = None       # set by run_app: stops everything and relaunches

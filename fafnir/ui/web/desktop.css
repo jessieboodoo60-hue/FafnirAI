@@ -111,15 +111,22 @@ body.wp-graphite #wallpaper {  /* plain graphite */
 .w-briefing { font-family: var(--font-display); font-size: 17px; font-weight: 600; line-height: 1.32; margin: 4px 0 10px;
   overflow-wrap: anywhere; }
 .w-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; min-width: 0; }
-.w-items li { display: flex; gap: 10px; align-items: baseline; padding: 7px 2px; border-top: .5px solid var(--hair); min-width: 0; }
-.w-items li .ic { flex: none; width: 16px; text-align: center; color: var(--text-3); }
-.w-items li .t { flex: 1 1 auto; min-width: 0; font-size: 13px; overflow-wrap: anywhere; }
-.w-items li .d { flex: 0 1 auto; min-width: 0; max-width: 42%; font-size: 11.5px; color: var(--text-3); text-align: right;
-  overflow-wrap: anywhere; }
-@media (max-width: 520px) {   /* narrow: the detail goes under the title instead of squeezing it */
+/* Each item: icon on the left; title, then detail underneath, both full width. Items can carry whole
+   reports (a crew agent's content calendar, research with sources), so title and detail show two lines
+   each and end in "…"; clicking an item opens it to show everything (nothing is thrown away). */
+.w-items li { display: grid; grid-template-columns: 16px minmax(0, 1fr); column-gap: 10px; row-gap: 2px;
+  padding: 7px 2px; border-top: .5px solid var(--hair); min-width: 0; cursor: pointer; }
+.w-items li .ic { grid-row: 1 / span 2; text-align: center; color: var(--text-3); }
+.w-items li .t, .w-items li .d { grid-column: 2; min-width: 0; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.w-items li .t { font-size: 13px; line-height: 1.3; }
+.w-items li .d { font-size: 11.5px; line-height: 1.35; color: var(--text-3); }
+.w-items li .d:empty { display: none; }
+.w-items li.open .t, .w-items li.open .d { -webkit-line-clamp: unset; display: block; }
+.w-items li.open .d { max-height: 240px; overflow-y: auto; white-space: pre-wrap; }
+.w-items li:hover .t { color: var(--text-1, inherit); }
+@media (max-width: 520px) {
   #widget-now { left: 12px; width: calc(100vw - 24px); }
-  .w-items li { flex-wrap: wrap; }
-  .w-items li .d { flex-basis: 100%; max-width: none; text-align: left; padding-left: 26px; }
 }
 .tag-urgent .t { color: #f2837f; } .tag-important .t { color: #ecbc6a; } .tag-good .t { color: #7fd0a6; }
 
