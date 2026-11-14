@@ -121,6 +121,7 @@ def test_crash_recovery_and_checkpoints(env):
     with pytest.raises(SystemExit):
         o.run_once()
     assert o.job(j["id"])["status"] == "running"
+    o._db.execute("UPDATE jobs SET owner_pid=999999999 WHERE id=?", (j["id"],))   # that program is gone
     o2 = O.Ops(tmp / "ops.db", settings=lambda: settings)      # Fafnir starts again
     o2.register(O.JobKind("long", long_job))
     assert o2.job(j["id"])["status"] == "queued"
@@ -284,3 +285,15 @@ def test_daily_report_costs_nothing(env):
     run_all(o)
     assert any(k == "report" for k, _ in events)
     assert o.budget()["spent_usd"] == 0
+
+
+def test_a_second_program_does_not_steal_running_jobs(env):
+    o, clock, settings, notes, events, killed, tmp = env
+    o.register(O.JobKind("slow", lambda c: 1))
+    j = o.enqueue("slow")
+    o._claim()                                                   # this program is running it
+    other = O.Ops(tmp / "ops.db", settings=lambda: settings)    # a command or check opens the database
+    assert other.job(j["id"])["status"] == "running", "left alone: its program is alive"
+    o._db.execute("UPDATE jobs SET owner_pid=999999999 WHERE id=?", (j["id"],))
+    third = O.Ops(tmp / "ops.db", settings=lambda: settings)
+    assert third.job(j["id"])["status"] == "queued", "recovered once its program has gone"

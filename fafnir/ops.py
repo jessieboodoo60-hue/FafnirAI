@@ -24,6 +24,7 @@ Everything the future agent workforce does goes through here, so it is safe by c
 from __future__ import annotations
 
 import json
+import os
 import random
 import sqlite3
 import threading
@@ -39,7 +40,7 @@ LEVELS = {1: "Research: agents research and recommend", 2: "Assisted: agents pre
 # Actions that need the owner's yes at EVERY autonomy level.
 ALWAYS_APPROVE = {"spend", "paid_campaign", "bulk_outreach", "contract", "move_funds", "change_financial_account",
                   "publish", "deploy", "delete_data", "legal"}
-LEASE_SECONDS = 15 * 60
+LEASE_SECONDS = 40 * 60      # longer than the longest task (a StarNet run is capped at ~16 min)
 BACKOFF_BASE, BACKOFF_CAP = 30, 3600
 SUSPEND_AFTER_FAILURES, SUSPEND_WINDOW = 3, 3600
 APPROVAL_DAYS = 7
@@ -47,6 +48,15 @@ APPROVAL_DAYS = 7
 
 class WaitingApproval(Exception):
     """Raised inside a job to park it until the owner answers."""
+
+
+class Defer(Exception):
+    """Raised inside a job to try again later without using up an attempt (waiting for other jobs,
+    or for a game to finish so a local model can load)."""
+
+    def __init__(self, seconds: float = 60, why: str = ""):
+        super().__init__(why)
+        self.seconds, self.why = seconds, why
 
 
 class Refused(Exception):
@@ -78,7 +88,7 @@ def _iso(t: float | None) -> str | None:
 class Ops:
     def __init__(self, path: Path, notify: Callable[[str, str], None] | None = None,
                  publish: Callable[..., None] | None = None, settings: Callable[[], dict] | None = None,
-                 killswitch_engaged: Callable[[], bool] | None = None):
+                 killswitch_engaged: Callable[[], bool] | None = None, recover: bool = True):
         self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.notify = notify or (lambda title, urgency: None)
@@ -109,7 +119,10 @@ class Ops:
             CREATE TABLE IF NOT EXISTS roles (name TEXT PRIMARY KEY, suspended INTEGER DEFAULT 0, why TEXT,
                 monthly_usd REAL);
         """)
-        self._recover()
+        if "owner_pid" not in {r[1] for r in self._db.execute("PRAGMA table_info(jobs)")}:
+            self._db.execute("ALTER TABLE jobs ADD COLUMN owner_pid INTEGER")
+        if recover:
+            self._recover()
 
     # ---- settings ----------------------------------------------------------------------------
     @property
@@ -127,12 +140,31 @@ class Ops:
             return 50.0
 
     # ---- start-up recovery ----------------------------------------------------------------------
+    @staticmethod
+    def _alive(pid) -> bool:
+        if not pid:
+            return False
+        if pid == os.getpid():
+            return True
+        try:
+            import psutil
+            return psutil.pid_exists(int(pid))
+        except Exception:
+            return True   # can't tell: leave it alone
+
     def _recover(self) -> None:
-        """Jobs left 'running' when Fafnir stopped (crash, restart) go back in the queue. This runs once,
-        before any worker starts, so nothing 'running' can belong to this process."""
+        """Jobs left 'running' by a Fafnir that has gone (crash, restart) go back in the queue. A job whose
+        program is still running is left alone, so a second program opening the database (a command,
+        a check) can't make a job run twice. Expired leases are recovered too."""
         with self._lock:
-            n = self._db.execute("UPDATE jobs SET status='queued', lease_until=NULL, next_run=?, updated=? "
-                                 "WHERE status='running'", (_now(), _now())).rowcount
+            n = 0
+            for r in self._db.execute("SELECT id, owner_pid, lease_until FROM jobs WHERE status='running'").fetchall():
+                if self._alive(r["owner_pid"]) and (r["lease_until"] or 0) > _now() and r["owner_pid"] != os.getpid():
+                    continue
+                if r["owner_pid"] == os.getpid():
+                    continue
+                n += self._db.execute("UPDATE jobs SET status='queued', lease_until=NULL, owner_pid=NULL, next_run=?, "
+                                      "updated=? WHERE id=? AND status='running'", (_now(), _now(), r["id"])).rowcount
         if n:
             print(f"[ops] {n} interrupted job(s) put back in the queue", flush=True)
 
@@ -171,6 +203,10 @@ class Ops:
         if n:
             self.publish("job", id=job_id, status="cancelled")
         return bool(n)
+
+    def children(self, parent_id: int) -> list[dict]:
+        rows = self._db.execute("SELECT * FROM jobs WHERE json_extract(payload, '$.parent')=? ORDER BY id", (parent_id,)).fetchall()
+        return [self._job_dict(r) for r in rows]
 
     def jobs(self, status: str | None = None, limit: int = 50) -> list[dict]:
         q = "SELECT * FROM jobs" + (" WHERE status=?" if status else "") + " ORDER BY id DESC LIMIT ?"
@@ -369,9 +405,9 @@ class Ops:
                                    "ORDER BY next_run, id LIMIT 1", (_now(),)).fetchone()
             if not row:
                 return None
-            got = self._db.execute("UPDATE jobs SET status='running', lease_until=?, attempts=attempts+1, updated=? "
-                                   "WHERE id=? AND status IN ('queued','retrying')",
-                                   (_now() + LEASE_SECONDS, _now(), row["id"])).rowcount
+            got = self._db.execute("UPDATE jobs SET status='running', lease_until=?, attempts=attempts+1, updated=?, "
+                                   "owner_pid=? WHERE id=? AND status IN ('queued','retrying')",
+                                   (_now() + LEASE_SECONDS, _now(), os.getpid(), row["id"])).rowcount
             return self._db.execute("SELECT * FROM jobs WHERE id=?", (row["id"],)).fetchone() if got else None
 
     def _seconds_until_next(self) -> float:
@@ -397,6 +433,11 @@ class Ops:
                 raise WaitingApproval()   # parked; resumes when the role is resumed
             result = kind.handler(ctx)
             self._finish(row["id"], "done", result=result)
+        except Defer as d:
+            with self._lock:
+                self._db.execute("UPDATE jobs SET status='queued', attempts=attempts-1, lease_until=NULL, next_run=?, "
+                                 "error=?, updated=? WHERE id=?", (_now() + d.seconds, d.why[:300] or None, _now(), row["id"]))
+            self.publish("job", id=row["id"], status="waiting", why=d.why[:120])
         except WaitingApproval:
             with self._lock:
                 status = "waiting_approval" if ctx.approval_id else "queued"

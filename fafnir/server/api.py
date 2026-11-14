@@ -58,6 +58,18 @@ class Budget(BaseModel):
     monthly_usd: float = Field(ge=0, le=10000)
 
 
+class Task(BaseModel):
+    instruction: str = Field(min_length=3, max_length=4000)
+    client: str = Field(default="", max_length=80)
+    project: str = Field(default="", max_length=80)
+
+
+class Goal(BaseModel):
+    goal: str = Field(min_length=3, max_length=2000)
+    client: str = Field(default="", max_length=80)
+    project: str = Field(default="", max_length=80)
+
+
 class Level(BaseModel):
     level: int = Field(ge=1, le=4)
 
@@ -67,7 +79,7 @@ def _log(what: str, who: str = "", ok: bool = True) -> None:
                   "result": f"{what}" + (f" ({who})" if who else ""), "error": not ok})
 
 
-def create_app(store: AuthStore, engine=None, health=None, ops=None) -> FastAPI:
+def create_app(store: AuthStore, engine=None, health=None, ops=None, workforce=None) -> FastAPI:
     app = FastAPI(title="FafnirAI", docs_url=None, redoc_url=None, openapi_url=None)
     calls: dict[str, list[float]] = {}
 
@@ -294,6 +306,53 @@ def create_app(store: AuthStore, engine=None, health=None, ops=None) -> FastAPI:
         _log(f"resumed role {role}", p.username)
         return {"ok": True}
 
+    def need_wf():
+        if workforce is None:
+            raise HTTPException(503, "The workforce isn't running.")
+        return workforce
+
+    @app.get("/api/agents")
+    def agents(p: Principal = Depends(need("read"))):
+        return {"autonomy_level": need_ops().level, "agents": need_wf().roster()}
+
+    @app.post("/api/agents/{role}/tasks")
+    def assign(role: str, body: Task, p: Principal = Depends(need("control"))):
+        from ..ops import Refused
+        try:
+            j = need_wf().assign(role, body.instruction, client=body.client, project=body.project)
+        except Refused as ex:
+            raise HTTPException(409, str(ex))
+        _log(f"gave {role} a task", p.username)
+        return j
+
+    @app.post("/api/agents/{role}/pause")
+    def pause_role(role: str, p: Principal = Depends(need("control"))):
+        need_ops().suspend(role, f"paused by {p.username} from the app")
+        return {"ok": True}
+
+    @app.post("/api/agents/{role}/resume")
+    def resume_agent(role: str, p: Principal = Depends(need("control"))):
+        need_ops().resume_role(role)
+        return {"ok": True}
+
+    @app.post("/api/goals")
+    def goal(body: Goal, p: Principal = Depends(need("control"))):
+        from ..ops import Refused
+        try:
+            j = need_wf().give_goal(body.goal, client=body.client, project=body.project)
+        except Refused as ex:
+            raise HTTPException(409, str(ex))
+        _log("gave the team a goal", p.username)
+        return j
+
+    @app.get("/api/goals")
+    def goals(p: Principal = Depends(need("read"))):
+        o = need_ops()
+        out = []
+        for g in [j for j in o.jobs(limit=200) if j["kind"] == "goal"][:30]:
+            out.append({**g, "tasks": o.children(g["id"])})
+        return {"goals": out}
+
     @app.get("/api/schedules")
     def schedules(p: Principal = Depends(need("read"))):
         return {"schedules": need_ops().schedules()}
@@ -363,14 +422,14 @@ def create_app(store: AuthStore, engine=None, health=None, ops=None) -> FastAPI:
 
 
 # ---- running it inside Fafnir ------------------------------------------------------------------
-def start_in_background(engine, port: int = 8790, db: Path | None = None, ops=None) -> threading.Thread | None:
+def start_in_background(engine, port: int = 8790, db: Path | None = None, ops=None, workforce=None) -> threading.Thread | None:
     """Start the API on 127.0.0.1:<port> in a background thread, wired to the live engine."""
     import uvicorn
 
     from ..config import ROOT
     store = AuthStore(db or ROOT / "data" / "app_users.db")
     hub.tee_engine_events(engine)
-    app = create_app(store, engine, ops=ops)
+    app = create_app(store, engine, ops=ops, workforce=workforce)
     config = uvicorn.Config(app, host="127.0.0.1", port=port, log_level="warning", access_log=False,
                             ws_ping_interval=20, ws_ping_timeout=20)
     server = uvicorn.Server(config)

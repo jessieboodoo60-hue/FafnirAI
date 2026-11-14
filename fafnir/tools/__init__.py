@@ -81,6 +81,63 @@ def _register_calculator(reg: Registry) -> None:
         properties={"expression": {"type": "string"}}))
 
 
+def _register_workforce_tools(reg: Registry) -> None:
+    from .registry import Tool, ToolError
+
+    def wf():
+        w = RESOURCES.get("workforce")
+        if w is None:
+            raise ToolError("The workforce isn't running (it starts with the desktop app).")
+        return w
+
+    def assign(role: str, instruction: str) -> dict:
+        from ..ops import Refused
+        try:
+            j = wf().assign(role, instruction)
+        except Refused as e:
+            raise ToolError(str(e))
+        return {"queued": True, "job": j["id"], "note": "It runs in the background; the result arrives as a notice."}
+
+    def goal(goal: str) -> dict:
+        from ..ops import Refused
+        try:
+            j = wf().give_goal(goal)
+        except Refused as e:
+            raise ToolError(str(e))
+        return {"queued": True, "job": j["id"], "note": "The orchestrator splits it into tasks for the team and "
+                                                       "reports an executive summary when they're done."}
+
+    def status() -> dict:
+        w = wf()
+        return {"autonomy_level": w.ops.level, "budget": w.ops.budget()["spent_usd"],
+                "team": [{"role": a["id"], "name": a["name"], "state": a["state"], "runs_on": a["worker"],
+                          "why": a["why"]} for a in w.roster()],
+                "pending_approvals": len(w.ops.approvals()),
+                "recent_results": [{"job": j["id"], "kind": j["kind"], "status": j["status"],
+                                    "output": ((j.get("result") or {}).get("output") or (j.get("result") or {}).get("summary") or "")[:400]}
+                                   for j in w.ops.jobs(limit=8)]}
+
+    from ..workforce import ROLES
+    roles = [r.id for r in ROLES]
+    reg.register(Tool(
+        name="workforce_assign", handler=assign, required=["role", "instruction"],
+        description="Give one task to a role on the owner's AI team (research, marketing, creative_director, "
+                    "lead_scoring, finance, outreach, sales...). It runs in the background through the job system, "
+                    "within the budget and the autonomy level, and the result comes back as a notice. The team "
+                    "can research and prepare; it can't send, post, pay or delete.",
+        properties={"role": {"type": "string", "enum": roles},
+                    "instruction": {"type": "string", "description": "A complete, self-contained task."}}))
+    reg.register(Tool(
+        name="workforce_goal", handler=goal, required=["goal"],
+        description="Give the whole AI team a goal; the orchestrator splits it into tasks for the right roles and "
+                    "reports an executive summary. Use for bigger asks ('look into starting a website business').",
+        properties={"goal": {"type": "string"}}))
+    reg.register(Tool(
+        name="workforce_status", handler=status, properties={},
+        description="The AI team: each role, what it runs on, whether it's idle, busy, paused or unavailable and "
+                    "why, what's waiting for approval, and the latest results."))
+
+
 def _register_health_tool(reg: Registry) -> None:
     from .registry import Tool
 
@@ -134,6 +191,7 @@ def build_registry(cfg: Config, memory: MemoryStore) -> Registry:
     _register_profile_tool(reg)
     _register_privacy_tool(reg)
     _register_health_tool(reg)
+    _register_workforce_tools(reg)
     business.register(reg, ROOT / "data")
     computer.register(reg)
     apps.register(reg)

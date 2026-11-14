@@ -1142,6 +1142,21 @@ def run_app(argv: list[str]) -> int:
         ops = Ops(ROOT / "data" / "ops.db", notify=ops_notice, publish=hub.publish,
                   settings=config_edit.read_all, killswitch_engaged=killswitch.engaged)
         register_builtin(ops)
+        from .. import integrations
+        from ..workforce import Workforce
+
+        def wf_notice(title: str, detail: str, urgency: str) -> None:
+            NOTICES.add(Notice(key=f"workforce:{title[:80]}:{datetime.now():%Y-%m-%d %H:%M}", title=title, detail=detail,
+                               urgency=urgency, check="workforce"))
+
+        def gaming() -> bool:
+            res = getattr(engine, "resources", None)
+            return bool(res and (res.profile == "gaming" or res.game))
+
+        wf = Workforce(ops, local_model=cfg.local.fast, notify=wf_notice, gaming=gaming,
+                       integration_on=integrations.enabled,
+                       mapping=dict(config_edit.read_all().get("workforce", {}).get("crew", {})))
+        RESOURCES["workforce"] = wf
         ops.start(workers=2)
         RESOURCES["ops"] = ops
         engine.ops = ops
@@ -1151,7 +1166,8 @@ def run_app(argv: list[str]) -> int:
     if _app_config_api().get("enabled", True):
         try:
             from ..server.api import start_in_background
-            start_in_background(engine, port=int(_app_config_api().get("port", 8790)), ops=ops)
+            start_in_background(engine, port=int(_app_config_api().get("port", 8790)), ops=ops,
+                                workforce=RESOURCES.get("workforce") if ops else None)
         except Exception as e:
             print(f"[app api] not started: {type(e).__name__}: {e}", flush=True)
     health = getattr(engine, "health", None)

@@ -42,6 +42,9 @@ HINTS = {
     "private_files_list": "what is in my vault, list my private documents",
     "private_files_unlock": "passport, national ID card, driver's permit, birth certificate, personal information, "
                             "my ID number, identity documents",
+    "workforce_assign": "have the team research, ask the researcher, get marketing to plan, give my agents a task, delegate",
+    "workforce_goal": "give the team a goal, get the business going on, have the company look into, plan a launch",
+    "workforce_status": "how is my team doing, what are the agents working on, show the workforce, agent results",
     "calculate": "what is 17 times 23, multiply, divide, add up, percentage of, how much is 15 percent, sum, total, maths, arithmetic",
     "health_status": "how are you doing, run diagnostics, is everything working, system check, why are you slow, status report",
     "privacy_report": "what have you sent out, did anything leave my PC, what data did you share, outbound requests",
@@ -59,6 +62,7 @@ FAMILIES = [
     {"gmail_send", "contacts_search"},
     {"memory_search", "memory_forget", "memory_update"},
     {"private_files_add", "private_files_remove", "private_files_list"},
+    {"workforce_assign", "workforce_goal", "workforce_status"},
     {"computer_find_files", "computer_read_text_file"},
 ]
 
