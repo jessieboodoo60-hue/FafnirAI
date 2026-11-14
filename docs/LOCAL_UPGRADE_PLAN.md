@@ -139,3 +139,9 @@ Claude, so the gate matters more, not less; Discord, WhatsApp and Google stay ou
 One line (`provider` in `config.toml`) returns to today's brain at any point. Each stage is its own
 commit on GitHub; `git checkout pre-local` returns the code to today's state; stage 0's backup
 restores the data.
+
+## 10. Progress log
+
+- **Stage 0 done (2026-11-13):** encrypted backups (restore tested), tag `pre-local`, test set; Claude reference 40/41, 1.58 s median.
+- **Stage 1 done (2026-11-13):** local brain behind `provider = "ollama"`. Qwen3 8B 38/41 at 1.88 s; Qwen3 4B 34/41 at 0.75 s. Not switched on.
+- **Stage 2 done (2026-11-13):** profiles and gaming awareness. Switch times 1.3-6.5 s. Findings: the CPU is not a usable brain fallback (4B reads prompts at ~45 tokens/s); the 8B plus voice uses 7.5 of 8 GB, so `auto` mostly lands on Balanced. FPS impact in a real game has NOT been measured yet (no game was running during the tests).

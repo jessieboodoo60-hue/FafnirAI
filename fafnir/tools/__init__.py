@@ -12,7 +12,30 @@ from .registry import Registry
 # (filled in by whichever front end starts it).
 NOTICES = NoticeStore(ROOT / "data" / "notices.json")
 HEARTBEAT: dict = {}
+RESOURCES: dict = {}   # {"manager": ResourceManager} once the engine starts it
 CONVERSATIONS = ConversationLog(ROOT / "data" / "conversations")
+
+
+def _register_profile_tool(reg: Registry) -> None:
+    from .registry import Tool, ToolError
+
+    def profile(mode: str = "") -> dict:
+        m = RESOURCES.get("manager")
+        if m is None:
+            raise ToolError("The performance manager isn't running (it starts with the app).")
+        try:
+            return m.set_mode(mode) if mode else m.status()
+        except ValueError as e:
+            raise ToolError(str(e))
+
+    reg.register(Tool(
+        name="performance_profile", handler=profile,
+        description="Fafnir's performance profile: how much of the graphics card it uses. No mode = report the "
+                    "current profile, graphics memory and whether a game is running. Modes: 'auto' (decides by "
+                    "itself, gaming while a game runs), 'gaming' (frees the graphics card for the game), "
+                    "'balanced', 'ai_performance' (best local brain). Use for 'gaming mode', 'free up my GPU', "
+                    "'AI performance mode', 'what profile are you in'.",
+        properties={"mode": {"type": "string", "enum": ["auto", "gaming", "balanced", "ai_performance"]}}))
 
 
 def build_registry(cfg: Config, memory: MemoryStore) -> Registry:
@@ -25,6 +48,7 @@ def build_registry(cfg: Config, memory: MemoryStore) -> Registry:
     desktop_control.register(reg)             # see the screen, use the mouse and keyboard
     cameras.register(reg)                     # Hikvision DVR / security cameras
     private_vault.register(reg, t.private_folder)   # encrypted passport/IDs: always asks before unlocking
+    _register_profile_tool(reg)
     business.register(reg, ROOT / "data")
     computer.register(reg)
     apps.register(reg)

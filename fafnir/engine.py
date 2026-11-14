@@ -159,6 +159,7 @@ class Engine:
     def start(self) -> None:
         threading.Thread(target=self._worker, daemon=True).start()
         self._start_killswitch()
+        self._start_resources()
         threading.Thread(target=self._warm_up, daemon=True, name="warm-up").start()
         if self.voice and (self.cfg.voice.mic_preference or self.cfg.voice.mic_for_speaker):
             threading.Thread(target=self._watch_mics, daemon=True, name="mic-watch").start()
@@ -212,6 +213,23 @@ class Engine:
         if len(heard) < 2:
             return False
         return sum(w in mine for w in heard) / len(heard) >= 0.7
+
+    # ---- gaming-aware profiles (what may sit on the graphics card) ----
+    def _start_resources(self) -> None:
+        try:
+            from .resources import ResourceManager
+            from .tools import RESOURCES
+            set_voice = None
+            tts = self.speaker.tts if self.speaker else None
+            if tts is not None and hasattr(type(tts), "set_device"):
+                set_voice = type(tts).set_device
+            self.resources = ResourceManager(
+                self.cfg, self.agent, set_voice_device=set_voice,
+                on_change=lambda profile, why: self.events.notice(f"Profile: {profile.replace('_', ' ')} ({why})"))
+            RESOURCES["manager"] = self.resources
+            self.resources.start()
+        except Exception as e:
+            print(f"[profile] not started: {type(e).__name__}: {e}", flush=True)
 
     # ---- emergency kill switch ----------------------------------------------------
     def _start_killswitch(self) -> None:

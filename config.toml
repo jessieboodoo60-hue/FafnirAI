@@ -40,6 +40,23 @@ max_tools = 10
 # "ask" = ask you each time before sending it to the cloud brain; "never" = stay local.
 cloud_fallback = "ask"
 keep_alive = "30m"
+# The smaller, faster model the Balanced profile uses (fits beside OBS and other apps).
+fast = "qwen3:4b-instruct"
+
+[performance]
+# What Fafnir may keep on the graphics card. "auto" decides by itself:
+#   gaming         - a game is running: local models unloaded, voice made on the processor
+#   balanced       - the 4B model + voice on the card
+#   ai_performance - the 8B model + voice on the card (needs ~6 GB of graphics memory free)
+# Or fix one: "gaming", "balanced", "ai_performance". You can also just tell Fafnir "gaming mode".
+profile = "auto"
+# In Gaming the local brain is unloaded. What to do with requests then:
+# "ask" = ask you before sending each one to the cloud brain; "cloud" = send without asking; "off" = decline.
+gaming_brain = "ask"
+# Extra program names to treat as games / never treat as games (games in Steam, Epic, Riot,
+# Xbox, Ubisoft, GOG, EA, Battle.net and Rockstar folders are found automatically).
+games = []
+not_games = []
 
 [tools]
 # Your private documents (passport, IDs). Kept as one encrypted file in this folder; Fafnir

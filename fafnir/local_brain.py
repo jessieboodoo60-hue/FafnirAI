@@ -91,6 +91,8 @@ class LocalAgent:
         self.cfg, self.registry, self.memory, self.turn_context = cfg, registry, memory, turn_context
         lc = cfg.local
         self.model, self.num_ctx, self.max_tools = lc.name, lc.num_ctx, lc.max_tools
+        self.active_model: str | None = lc.name   # None = unloaded (Gaming profile)
+        self.gaming_brain = "ask"
         self.cloud_policy = lc.cloud_fallback if make_cloud else "never"
         self._make_cloud, self._cloud = make_cloud, None
         self.llm = _UsageHolder()
@@ -104,12 +106,20 @@ class LocalAgent:
     def warm_up(self) -> None:
         """Load the model into graphics memory and build the tool index now."""
         self.router
+        if not self.active_model:
+            return
         try:
             httpx.post(f"{OLLAMA}/api/chat", timeout=120, json={
                 "model": self.model, "messages": [{"role": "user", "content": "hi"}], "stream": False, "think": False,
                 "options": {"num_ctx": self.num_ctx, "num_predict": 1}, "keep_alive": self.cfg.local.keep_alive})
         except httpx.HTTPError as e:
             raise LLMError(_friendly(e))
+
+    def use_model(self, name: str | None, gaming_brain: str = "ask") -> None:
+        """Called by the resource manager: which local model to use now (None = none, Gaming)."""
+        self.active_model, self.gaming_brain = name, gaming_brain
+        if name:
+            self.model = name
 
     def reset(self) -> None:
         self.history, self._last_tools = [], []
@@ -172,6 +182,9 @@ class LocalAgent:
 
     def _run(self, user_text, on_text, cancel, on_tool, confirm, owner_present) -> Reply:
         t0 = time.perf_counter()
+        if not self.active_model:   # Gaming profile: nothing of ours on the graphics card
+            return self._escalate(user_text, "gaming mode",
+                                  [], on_text, cancel, on_tool, confirm, owner_present, policy=self.gaming_brain)
         tools = self._tools_for(user_text)
         system = core_prompt(self.cfg, self._memory_for(user_text), self.cloud_policy != "never")
         if self.turn_context:
@@ -254,18 +267,23 @@ class LocalAgent:
         return text, calls
 
     # ---- cloud fallback (always with the owner's yes) ---------------------------------------
-    def _escalate(self, user_text, reason, said, on_text, cancel, on_tool, confirm, owner_present) -> Reply:
+    def _escalate(self, user_text, reason, said, on_text, cancel, on_tool, confirm, owner_present,
+                  policy: str | None = None) -> Reply:
+        policy = {"cloud": "always", "off": "never"}.get(policy or "", policy) or self.cloud_policy
+        if self.cloud_policy == "never":
+            policy = "never"
         def local_only(msg: str) -> Reply:
             if on_text:
                 on_text(msg)
             self.history += [{"role": "user", "content": user_text}, {"role": "assistant", "content": msg}]
             return Reply(text="".join(said) + msg, content=[], stop_reason="end_turn")
 
-        if self.cloud_policy == "never" or self._make_cloud is None:
-            return local_only(f"I can't do that locally: it needs {reason}, and the cloud brain is switched off.")
-        if self.cloud_policy == "ask":
-            ok = bool(confirm and owner_present and confirm(
-                f"This needs the cloud brain, for {reason}. Send this request to Claude?"))
+        if policy == "never" or self._make_cloud is None:
+            return local_only(f"I can't do that right now: it needs {reason}, and the cloud brain is switched off.")
+        if policy == "ask":
+            why = ("I'm in gaming mode, so the local brain is unloaded." if reason == "gaming mode"
+                   else f"This needs the cloud brain, for {reason}.")
+            ok = bool(confirm and owner_present and confirm(f"{why} Send this request to Claude?"))
             if not ok:
                 return local_only("Okay, keeping it on this PC. I can't do that one without the cloud brain.")
         if self._cloud is None:

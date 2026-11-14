@@ -95,6 +95,18 @@ class LocalConfig:
     max_tools: int = 10            # tools offered to the model per request (picked by the router)
     cloud_fallback: str = "ask"    # "ask" (owner says yes each time) | "never" | "always"
     keep_alive: str = "30m"        # how long the model stays loaded after the last request
+    fast: str = "qwen3:4b-instruct"  # the smaller model used by the Balanced profile
+
+
+@dataclass(frozen=True)
+class PerformanceConfig:
+    """Gaming-aware use of the graphics card (fafnir/resources.py)."""
+    profile: str = "auto"          # auto | gaming | balanced | ai_performance
+    gaming_brain: str = "ask"      # in Gaming (local model unloaded): "ask" each request, "cloud" (no ask) or "off"
+    vram_reserve_mb: int = 300     # graphics memory always left free for Windows and other apps
+    check_seconds: float = 5.0
+    games: tuple[str, ...] = ()        # extra program names to treat as games, e.g. "RobloxPlayerBeta.exe"
+    not_games: tuple[str, ...] = ()    # program names never to treat as games
 
 
 @dataclass(frozen=True)
@@ -114,6 +126,7 @@ class Config:
     tools: ToolsConfig
     anthropic_api_key: str
     local: LocalConfig = LocalConfig()
+    performance: PerformanceConfig = PerformanceConfig()
 
 
 def _tools(raw: dict) -> ToolsConfig:
@@ -202,6 +215,9 @@ def load_config(path: Path | None = None) -> Config:
             anthropic_api_key=key,
             local=LocalConfig(**{k: v for k, v in m.get("local", {}).items()
                                  if k in LocalConfig.__dataclass_fields__}),
+            performance=PerformanceConfig(**{k: (tuple(v) if isinstance(v, list) else v)
+                                             for k, v in raw.get("performance", {}).items()
+                                             if k in PerformanceConfig.__dataclass_fields__}),
         )
     except KeyError as e:
         raise ConfigError(f"config.toml is missing the setting {e}")

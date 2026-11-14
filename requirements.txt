@@ -20,3 +20,5 @@ onnxruntime-gpu[cuda,cudnn]
 soundfile
 # WebRTC audio processing (noise suppression) for the mic
 livekit
+# spotting running games (gaming-aware profiles)
+psutil

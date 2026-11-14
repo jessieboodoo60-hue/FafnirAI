@@ -197,11 +197,11 @@ def _drain(q: queue.Queue) -> None:
 
 
 # ---- Kokoro: offline speech (no API key) ---------------------------------------------------
-def _kokoro_session(model_path: str):
+def _kokoro_session(model_path: str, device: str = "gpu"):
     """Run Kokoro on the NVIDIA card when possible (~6x faster: a sentence in ~0.2 s instead
     of 1-2 s), otherwise on the processor. The CUDA libraries come from pip (onnxruntime-gpu[cuda,cudnn])."""
     import onnxruntime as ort
-    if "CUDAExecutionProvider" in ort.get_available_providers():
+    if device != "cpu" and "CUDAExecutionProvider" in ort.get_available_providers():
         try:
             if hasattr(ort, "preload_dlls"):
                 ort.preload_dlls()
@@ -223,6 +223,21 @@ class KokoroTTS:
 
     _shared = None                      # one loaded model for the whole app
     _lock = threading.Lock()
+    _device = "gpu"                     # "gpu" or "cpu" (the Gaming profile frees the card)
+
+    @classmethod
+    def set_device(cls, device: str) -> None:
+        """Move the voice model between the graphics card and the processor. The old model is
+        dropped (freeing its graphics memory) and the new one is loaded straight away."""
+        device = "cpu" if device == "cpu" else "gpu"
+        with cls._lock:
+            if device == cls._device:
+                return
+            cls._device, cls._shared = device, None
+        import gc
+        gc.collect()
+        print(f"[voice] Kokoro moving to the {'processor' if device == 'cpu' else 'graphics card'}", flush=True)
+        threading.Thread(target=lambda: cls._model(), daemon=True, name="kokoro-load").start()
 
     def __init__(self, voice: str = "am_onyx", pitch: float = -3.0, speed: float = 1.0, reverb: float = 0.0,
                  lang: str = "en-us"):
@@ -238,7 +253,7 @@ class KokoroTTS:
                 model, voices = root / "kokoro-v1.0.onnx", root / "voices-v1.0.bin"
                 if not model.exists() or not voices.exists():
                     raise TTSError(f"Kokoro's model files are missing from {root}.")
-                cls._shared = Kokoro.from_session(_kokoro_session(str(model)), str(voices))
+                cls._shared = Kokoro.from_session(_kokoro_session(str(model), cls._device), str(voices))
             return cls._shared
 
     def warm_up(self) -> None:

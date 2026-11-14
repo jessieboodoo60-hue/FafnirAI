@@ -1036,12 +1036,25 @@ def run_app(argv: list[str]) -> int:
     app.setFont(QFont("Segoe UI", 11))
 
     # only one Fafnir at a time: a second launch just brings the first to the front
+    # A Windows mutex decides it (instant and atomic). The socket alone missed a second launch
+    # right after boot, when the first copy was too busy to answer within 0.3 s (2026-11-13:
+    # two Fafnirs ran side by side, both listening, each holding ~0.9 GB of graphics memory).
+    already = False
+    if sys.platform == "win32":
+        import ctypes
+        global _INSTANCE_MUTEX
+        k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+        _INSTANCE_MUTEX = k32.CreateMutexW(None, False, "Local\\FafnirAI-single-instance")
+        already = ctypes.get_last_error() == 183   # ERROR_ALREADY_EXISTS
     probe = QLocalSocket()
     probe.connectToServer(INSTANCE_KEY)
-    if probe.waitForConnected(300):
+    if probe.waitForConnected(3000 if already else 300):
         probe.write(b"show")
         probe.flush()
         probe.waitForBytesWritten(300)
+        return 0
+    if already:
+        print("Fafnir is already running; not starting a second copy.", flush=True)
         return 0
     QLocalServer.removeServer(INSTANCE_KEY)
     server = QLocalServer()
