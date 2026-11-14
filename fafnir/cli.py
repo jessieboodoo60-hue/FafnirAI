@@ -57,6 +57,21 @@ def main(argv: list[str] | None = None) -> int:
         from . import killswitch
         print("Kill switch released." if killswitch.release("command line") else "The kill switch wasn't on.")
         return
+    if "--memory-export" in argv or "--memory-import" in argv:
+        from .config import ROOT
+        flag = "--memory-export" if "--memory-export" in argv else "--memory-import"
+        i = argv.index(flag)
+        if i + 1 >= len(argv):
+            print(f"Usage: python main.py {flag} <file.md>")
+            return 1
+        store = MemoryStore(ROOT / "data" / "memory.md")
+        if flag == "--memory-export":
+            n = store.export_markdown(argv[i + 1])
+            print(f"Wrote {n} facts to {argv[i + 1]} (plain text: delete it when you're done).")
+        else:
+            r = store.import_markdown(argv[i + 1])
+            print(f"Memory now holds {r['facts']} facts" + (f" ({r['skipped_as_secrets']} skipped: looked like secrets)." if r["skipped_as_secrets"] else "."))
+        return 0
     if "--restore-backup" in argv:
         from .backup import restore_backup
         i = argv.index("--restore-backup")

@@ -160,6 +160,7 @@ class Engine:
         threading.Thread(target=self._worker, daemon=True).start()
         self._start_killswitch()
         self._start_resources()
+        threading.Thread(target=self._summarize_loop, daemon=True, name="summaries").start()
         threading.Thread(target=self._warm_up, daemon=True, name="warm-up").start()
         if self.voice and (self.cfg.voice.mic_preference or self.cfg.voice.mic_for_speaker):
             threading.Thread(target=self._watch_mics, daemon=True, name="mic-watch").start()
@@ -213,6 +214,30 @@ class Engine:
         if len(heard) < 2:
             return False
         return sum(w in mine for w in heard) / len(heard) >= 0.7
+
+    # ---- summaries of older conversations (local model, background) ----
+    def _summarize_loop(self) -> None:
+        from . import summarizer
+        from .config import ROOT
+        memory = getattr(self.agent, "memory", None)
+        if memory is None or not hasattr(memory, "add_summary"):
+            return
+        time.sleep(90)
+        while True:
+            try:
+                res = getattr(self, "resources", None)
+                snap = res.snapshot() if res else {}
+                idle = not self.busy and not self.listening
+                room = snap.get("free_for_models_mb", 0) - sum(snap.get("models_loaded", {}).values()) >= 3600 \
+                    or self.cfg.local.fast in snap.get("models_loaded", {})
+                if idle and not snap.get("game") and room:
+                    local = hasattr(self.agent, "use_model")
+                    done = summarizer.run(memory, ROOT / "data" / "conversations", self.cfg.local.fast, unload=not local)
+                    if done:
+                        print(f"[memory] summarised conversations from {', '.join(done)}", flush=True)
+            except Exception as e:
+                print(f"[memory] summaries skipped: {type(e).__name__}: {e}", flush=True)
+            time.sleep(6 * 3600)
 
     # ---- gaming-aware profiles (what may sit on the graphics card) ----
     def _start_resources(self) -> None:

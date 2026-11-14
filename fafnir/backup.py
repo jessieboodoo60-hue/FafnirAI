@@ -53,7 +53,7 @@ def make_backup(folder: str | Path = DEFAULT_FOLDER, keep: int = 14) -> dict:
     # sanity check: the saved file must decrypt, pass the zip integrity test and hold the essentials
     with zipfile.ZipFile(io.BytesIO(vault.decrypt(target.read_bytes()))) as z:
         names = set(z.namelist())
-        need = {n for n in (".env", "config.toml", "data/memory.md") if (ROOT / n).exists()}
+        need = {n for n in (".env", "config.toml", "data/memory.vault") if (ROOT / n).exists()}
         if z.testzip() is not None or not need <= names:
             target.unlink()
             raise OSError(f"Backup {target.name} failed its check.")

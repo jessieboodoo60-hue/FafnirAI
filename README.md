@@ -92,7 +92,13 @@ Settings (model, effort, tone, notes folder, web access, voice) live in `config.
 
 ## Memory
 
-Fafnir remembers lasting things you tell it (preferences, people, business details) in `data/memory.md`, and knows them the next time you start it. Say "remember..." to save something on purpose, or "forget..." to remove it. Type `/memory` to see everything stored. You can also open `data/memory.md` and edit or delete lines yourself; Fafnir uses your version from then on.
+Fafnir remembers lasting things you tell it (preferences, people, business details) and knows them the next time you start it. Say "remember..." to save something on purpose, or "forget..." to remove it. Type `/memory` to see everything stored.
+
+- **Encrypted:** memory lives in `data/memory.vault` (AES-256, same key as backups); nothing in it is readable on disk.
+- **Found by meaning:** "who does my taxes" finds "Accountant is Mr. Ramdeen" even with no shared words. The local brain is given only the few facts relevant to each request.
+- **No duplicates, no secrets:** a fact that means the same as a stored one is refused, and passwords, keys, and card, ID, passport or account numbers are never stored.
+- **Conversation summaries:** each past day is condensed into a few lines by the small local model (on this PC) so Fafnir can recall "what did we do on Tuesday".
+- **Your controls:** `python main.py --memory-export memory.md` writes everything as readable text; edit or delete lines, then `python main.py --memory-import memory.md` to load your version (delete the text file afterwards).
 
 ## Google (Calendar, Gmail, Drive, Docs, Sheets, Contacts, Tasks, YouTube)
 

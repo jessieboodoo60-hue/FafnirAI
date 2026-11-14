@@ -144,16 +144,18 @@ class LocalAgent:
 
     # ---- prompt pieces --------------------------------------------------------------------
     def _memory_for(self, text: str, limit: int = 8) -> list[str]:
-        """Only the stored facts relevant to this request (keeps the prompt small)."""
-        try:
-            facts = [f.fact for f in self.memory.all()] if self.memory else []
-        except Exception:
+        """Only the stored facts relevant to this request, plus at most one matching day summary
+        (keeps the prompt small)."""
+        if not self.memory:
             return []
-        if len(facts) <= limit:
-            return facts
-        from .embed import embed
-        scores = embed([text], query=True)[0] @ embed(facts).T
-        return [facts[i] for i in sorted(range(len(facts)), key=lambda i: -scores[i])[:limit]]
+        try:
+            lines = [f.text for f in self.memory.relevant(text, limit=limit)]
+            for s in self.memory.search_summaries(text, limit=1, floor=0.5):
+                lines.append(f"On {s['date']}: " + " ".join(ln.lstrip('- ') for ln in s["text"].splitlines())[:400])
+            return lines
+        except Exception as e:
+            print(f"[memory] lookup failed: {type(e).__name__}: {e}", flush=True)
+            return []
 
     def _history_tail(self) -> list[dict]:
         out, used = [], 0
