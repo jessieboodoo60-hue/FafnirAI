@@ -13,7 +13,7 @@ home_location = "Petit Valley, Diego Martin, Trinidad and Tobago"
 name = "claude-sonnet-5-5"
 # Where the brain runs: "api" uses Anthropic API credit (pay per token);
 # "claude_code" uses your Claude subscription through the installed Claude Code app.
-provider = "claude_code"
+provider = "ollama"
 # "ollama" runs the brain on this PC (private, free). Settings are under [model.local] below.
 # With "ollama", the cloud brain named here is only used when you say yes to a hand-off.
 cloud_provider = "claude_code"

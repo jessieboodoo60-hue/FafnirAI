@@ -15,6 +15,10 @@ CONFIG = ROOT / "config.toml"
 # (section, key) -> (kind, allowed, when): kind is choice | bool | number | text;
 # when is "now", "conversation" (next conversation) or "restart".
 EDITABLE: dict[tuple[str, str], tuple[str, object, str]] = {
+    ("model", "provider"): ("choice", ["ollama", "claude_code"], "restart"),   # local Qwen or cloud Claude
+    ("model.local", "cloud_fallback"): ("choice", ["ask", "never"], "restart"),
+    ("performance", "profile"): ("choice", ["auto", "gaming", "balanced", "ai_performance"], "now"),
+    ("performance", "gaming_brain"): ("choice", ["ask", "cloud", "off"], "restart"),
     ("model", "name"): ("choice", ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"], "conversation"),
     ("model", "effort"): ("choice", ["low", "medium", "high", "xhigh"], "conversation"),
     ("voice", "cue_sounds"): ("bool", None, "now"),

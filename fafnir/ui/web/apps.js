@@ -218,7 +218,11 @@ const RENDER = {
     w.body.innerHTML = `<div class="h">Settings</div><div class="sub">Changes save straight away${C.error ? " · " + esc(C.error) : ""}</div>
       ${C.restartNeeded ? `<div class="restart-bar"><span>Some changes apply after a restart.</span><button class="btn primary" id="set-restart">Restart ${esc(S.name)}</button></div>` : ""}
       <div class="sec">Brain</div><div class="set-group">
-        ${row("Model", seg("model.name", [["claude-sonnet-5-5", "Sonnet 5.5"], ["claude-opus-5-5", "Opus 5.5"], ["claude-haiku-5-5", "Haiku 5.5"]]), "model.name")}
+        ${row(`Where ${esc(S.name)} thinks<div class="set-note">Local = Qwen on this PC (private, free). Cloud = Claude.</div>`, seg("model.provider", [["ollama", "Local (Qwen)"], ["claude_code", "Cloud (Claude)"]]), "model.provider")}
+        ${v["model.provider"] === "ollama" ? row(`Hand-offs to the cloud<div class="set-note">For pictures, web search and long jobs the local brain can't do.</div>`, seg("model.local.cloud_fallback", [["ask", "Ask me each time"], ["never", "Never"]]), "model.local.cloud_fallback") : ""}
+        ${row(`Performance profile<div class="set-note">Auto frees the graphics card while a game runs.</div>`, seg("performance.profile", [["auto", "Auto"], ["gaming", "Gaming"], ["balanced", "Balanced"], ["ai_performance", "AI Performance"]]))}
+        ${v["model.provider"] === "ollama" ? row("Requests while in Gaming", seg("performance.gaming_brain", [["ask", "Ask, then cloud"], ["cloud", "Cloud, no asking"], ["off", "Decline"]]), "performance.gaming_brain") : ""}
+        ${row(v["model.provider"] === "ollama" ? "Cloud model (for hand-offs)" : "Model", seg("model.name", [["claude-sonnet-5-5", "Sonnet 5.5"], ["claude-opus-5-5", "Opus 5.5"], ["claude-haiku-5-5", "Haiku 5.5"]]), "model.name")}
         ${row("Thinking effort", seg("model.effort", [["low", "Low"], ["medium", "Medium"], ["high", "High"], ["xhigh", "Extra high"]]), "model.effort")}</div>
       <div class="sec">Voice</div><div class="set-group">
         ${row(`Wake word “${esc(S.name)}”`, sw_("voice.wake.enabled"), "voice.wake.enabled")}

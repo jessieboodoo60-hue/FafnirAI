@@ -92,6 +92,7 @@ class LocalAgent:
         lc = cfg.local
         self.model, self.num_ctx, self.max_tools = lc.name, lc.num_ctx, lc.max_tools
         self.active_model: str | None = lc.name   # None = unloaded (Gaming profile)
+        self._profile_set = threading.Event()     # set once the resource manager has chosen a model
         self.gaming_brain = "ask"
         self.cloud_policy = lc.cloud_fallback if make_cloud else "never"
         self._make_cloud, self._cloud = make_cloud, None
@@ -106,6 +107,8 @@ class LocalAgent:
     def warm_up(self) -> None:
         """Load the model into graphics memory and build the tool index now."""
         self.router
+        if not self._profile_set.wait(8):   # don't load the 8B only for the manager to swap it for the 4B
+            self._profile_set.set()         # no manager (tests, terminal mode): don't wait again
         if not self.active_model:
             return
         try:
@@ -118,6 +121,7 @@ class LocalAgent:
     def use_model(self, name: str | None, gaming_brain: str = "ask") -> None:
         """Called by the resource manager: which local model to use now (None = none, Gaming)."""
         self.active_model, self.gaming_brain = name, gaming_brain
+        self._profile_set.set()
         if name:
             self.model = name
 

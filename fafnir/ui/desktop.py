@@ -568,8 +568,17 @@ class DesktopWindow(QWebEngineView):
                      "while_speaking": "wake_while_speaking"}[key]
             cfg = self.engine.cfg
             self.engine.cfg = self.cfg = dataclasses.replace(cfg, voice=dataclasses.replace(cfg.voice, **{field: value}))
+        elif section == "performance" and key == "profile":
+            res = getattr(self.engine, "resources", None)
+            if res is not None:
+                res.set_mode(value)
         elif section == "model":
             agent = self.engine.agent
+            if hasattr(agent, "use_model"):       # local brain in charge: these two belong to its cloud helper
+                agent = getattr(agent, "_cloud", None)
+                if agent is None:
+                    self.restart_needed = True
+                    return
             if hasattr(agent, key if key == "effort" else "model"):
                 setattr(agent, "model" if key == "name" else "effort", value)   # Claude Code brain
             llm = getattr(agent, "llm", None)
