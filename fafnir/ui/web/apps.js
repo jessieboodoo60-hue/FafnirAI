@@ -225,6 +225,8 @@ const RENDER = {
         ${row(v["model.provider"] === "ollama" ? "Cloud model (for hand-offs)" : "Model", seg("model.name", [["claude-sonnet-5-5", "Sonnet 5.5"], ["claude-opus-5-5", "Opus 5.5"], ["claude-haiku-5-5", "Haiku 5.5"]]), "model.name")}
         ${row("Thinking effort", seg("model.effort", [["low", "Low"], ["medium", "Medium"], ["high", "High"], ["xhigh", "Extra high"]]), "model.effort")}</div>
       <div class="sec">Voice</div><div class="set-group">
+        ${row(`Speech recognition<div class="set-note">Local = Whisper on this PC (private, about half a second slower). Cloud = Deepgram.</div>`, seg("voice.stt.engine", [["local", "Local (Whisper)"], ["deepgram", "Cloud (Deepgram)"]]), "voice.stt.engine")}
+        ${row(`On headphones, just start talking to cut ${esc(S.name)} off`, sw_("voice.barge_in"), "voice.barge_in")}
         ${row(`Wake word “${esc(S.name)}”`, sw_("voice.wake.enabled"), "voice.wake.enabled")}
         ${row(`Keep listening after ${esc(S.name)} speaks <span class="k" id="fu-val">${v["voice.wake.follow_up_seconds"] ?? 6}s</span>`, `<input type="range" class="slider set-slider" data-k="voice.wake.follow_up_seconds" min="0" max="30" step="1" value="${v["voice.wake.follow_up_seconds"] ?? 6}">`)}
         ${row(`Wake word sensitivity <span class="k" id="sens-val">${v["voice.wake.sensitivity"] ?? 0.4}</span>`, `<input type="range" class="slider set-slider" data-k="voice.wake.sensitivity" min="0.1" max="0.9" step="0.05" value="${v["voice.wake.sensitivity"] ?? 0.4}">`, "voice.wake.sensitivity")}

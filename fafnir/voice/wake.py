@@ -23,6 +23,8 @@ import sounddevice as sd
 from .kws import RATE, Spotter
 from .recorder import pcm_level
 
+BARGE_FRAMES = 16                # ~0.5 s of sound before "the owner is talking over me" is considered
+BARGE_SPEECH_SECONDS = 0.3       # ...and at least this much of it must be real speech (Silero VAD)
 SILENT_PEAK = 4                  # samples never above this = the mic is off (real mics hiss louder)
 FRAME = 512                      # 32 ms
 PRE_ROLL = 8                     # frames kept from just before speech starts (~0.25 s)
@@ -51,6 +53,9 @@ class WakeWord:
         self.rate = RATE
         self.on_wake, self.on_chunk, self.on_done, self.on_open = on_wake, on_chunk, on_done, on_open
         self.clean_audio = True  # WebRTC noise suppression + low-cut on everything heard
+        self.on_barge = None   # set by the engine: called when speech starts while Fafnir talks
+        self.can_barge = None  # set by the engine: True while Fafnir is speaking through headphones
+        self._barge_tried = False
         self.is_muted = None   # set by the engine: True while Fafnir's own voice may be in the mic
         self._open_until = 0.0          # monotonic time the follow-up window closes
         self._opened = False            # the current capture came from the follow-up window
@@ -175,12 +180,23 @@ class WakeWord:
             return
 
         self._seg.append(chunk)
+        if (self.on_barge and self.can_barge and self.can_barge() and not self._barge_tried
+                and len(self._seg) >= BARGE_FRAMES + PRE_ROLL
+                and _has_speech(b"".join(self._seg), BARGE_SPEECH_SECONDS)):
+            self._barge_tried = True   # one try per burst
+            if self.on_barge():
+                frames, self._seg = self._seg, None
+                self._pre.clear()
+                self._barge_tried = False
+                self._begin(frames, still_talking=True, opened=True)
+                return
         if speech:
             self._seg_quiet_since = None
         elif self._seg_quiet_since is None:
             self._seg_quiet_since = now
         burst_over = self._seg_quiet_since is not None and now - self._seg_quiet_since > SEGMENT_GAP
         if burst_over or len(self._seg) >= self._check_len:
+            self._barge_tried = False
             seg, self._seg = self._seg, None
             self._pre.clear()
             pcm = b"".join(seg)
@@ -250,6 +266,17 @@ class WakeWord:
             w.writeframes(pcm)
         seconds = len(pcm) / (2 * RATE) if heard_speech else 0.0
         threading.Thread(target=self.on_done, args=(buf.getvalue(), seconds, self._opened), daemon=True).start()
+
+
+def _has_speech(pcm: bytes, seconds: float) -> bool:
+    """Does this audio contain at least `seconds` of human speech? (Silero VAD, local, ~10 ms.)"""
+    try:
+        from faster_whisper.vad import VadOptions, get_speech_timestamps
+        audio = np.frombuffer(pcm[: len(pcm) - len(pcm) % 2], dtype=np.int16).astype(np.float32) / 32768
+        spans = get_speech_timestamps(audio, VadOptions(min_speech_duration_ms=150, min_silence_duration_ms=200))
+        return sum(s["end"] - s["start"] for s in spans) / RATE >= seconds
+    except Exception:
+        return False
 
 
 class NoiseCleaner:

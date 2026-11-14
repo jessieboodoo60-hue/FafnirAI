@@ -148,6 +148,8 @@ headphones = ["Primus"]
 noise_suppression = true
 # Short beeps when recording starts and when Fafnir has heard you.
 cue_sounds = true
+# On headphones (see `headphones` below), just start talking to cut Fafnir off mid-sentence.
+barge_in = true
 # Print how long each stage took (transcribe, first audio).
 show_timings = true
 
@@ -169,7 +171,11 @@ while_speaking = true        # say the wake word to cut Fafnir off mid-sentence
 follow_up_seconds = 12
 
 [voice.stt]
-# Deepgram speech-to-text
+# Speech-to-text. "local" = Whisper on this PC (private; ~3.9% word errors, about 1 s, partly hidden
+# in your closing pause). "deepgram" = Deepgram's cloud (2.4% word errors, 0.13 s; needs the API key).
+engine = "local"
+local_model = "small.en"     # "tiny.en" is 5x faster but makes about twice as many mistakes
+# Deepgram settings (used only when engine = "deepgram")
 model = "nova-3"
 language = "en"
 

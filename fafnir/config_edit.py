@@ -22,6 +22,8 @@ EDITABLE: dict[tuple[str, str], tuple[str, object, str]] = {
     ("model", "name"): ("choice", ["claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-5-5"], "conversation"),
     ("model", "effort"): ("choice", ["low", "medium", "high", "xhigh"], "conversation"),
     ("voice", "cue_sounds"): ("bool", None, "now"),
+    ("voice", "barge_in"): ("bool", None, "restart"),
+    ("voice.stt", "engine"): ("choice", ["local", "deepgram"], "restart"),
     ("voice.wake", "enabled"): ("bool", None, "restart"),
     ("voice.wake", "sensitivity"): ("number", (0.05, 0.95), "restart"),
     ("voice.wake", "follow_up_seconds"): ("number", (0, 60), "now"),

@@ -124,11 +124,11 @@ class Engine:
             self._pick_mic()
             from .voice.ptt import PushToTalk
             from .voice.recorder import Recorder
-            from .voice.stt import DeepgramSTT
+            from .voice.local_stt import make_stt
             from .voice.tts import Speaker, make_tts
             v = cfg.voice
             keyterms = [self.name] + [p.strip() for p in cfg.assistant.home_location.split(",") if p.strip()]
-            self.stt = DeepgramSTT(v.deepgram_api_key, v.stt_model, v.stt_language, keyterms)
+            self.stt = make_stt(v, keyterms)   # local Whisper by default; Deepgram if chosen
             self.speaker = Speaker(make_tts(v),
                                    on_error=lambda m: self.events.error(m))
             self.recorder = Recorder()
@@ -150,6 +150,9 @@ class Engine:
                                  end_silence=v.wake_end_silence, name=self.name, engine=v.wake_engine,
                                  on_open=self._open_mic_heard)
             self.wake.is_muted = self._echo_risk
+            self.wake.on_barge = self._barge_in
+            self.wake.can_barge = lambda: bool(self.cfg.voice.barge_in and self.speaker and self.speaker.speaking
+                                               and not self.on_loudspeaker())
             self.wake.clean_audio = v.noise_suppression
         except Exception as e:  # no recordings yet, or no mic
             self.wake = None
@@ -298,6 +301,7 @@ class Engine:
     def _warm_up(self) -> None:
         """Load the voice model and connect to the brain now, not on the first request."""
         for name, fn in (("voice", getattr(self.speaker and self.speaker.tts, "warm_up", None)),
+                         ("speech recognition", getattr(self.stt, "warm_up", None)),
                          ("brain", getattr(self.agent, "warm_up", None))):
             if fn:
                 t = time.monotonic()
@@ -531,6 +535,23 @@ class Engine:
         self._window_gen += 1
         if self.wake:
             self.wake.close_window()
+
+    def _barge_in(self) -> bool:
+        """The owner started talking while Fafnir was speaking. On headphones (where the mic can't
+        hear Fafnir) that means 'stop and listen': cut the speech and capture what they say."""
+        if not (self.cfg.voice.barge_in and self.speaker and self.speaker.speaking):
+            return False
+        if self.on_loudspeaker() or (self.recorder and self.recorder.recording) or self._confirm_answer is not None:
+            return False
+        self.interrupt()
+        try:
+            self._wake_live = self.stt.start_live(self.wake.rate)
+            self.wake.set_on_chunk(self._wake_live.send)
+        except Exception:
+            self._wake_live = None
+            self.wake.set_on_chunk(None)
+        print("[voice] interrupted by the owner talking", flush=True)
+        return True
 
     def _open_mic_heard(self) -> bool:
         """Speech started inside a follow-up window. Returns True to capture it."""

@@ -233,8 +233,8 @@ class DiscordBridge:
         cfg = self.engine.cfg.voice
         stt = getattr(self.engine, "stt", None)
         if stt is None and cfg.deepgram_api_key:
-            from .voice.stt import DeepgramSTT
-            stt = DeepgramSTT(cfg.deepgram_api_key, cfg.stt_model, cfg.stt_language, [self.name])
+            from .voice.local_stt import make_stt
+            stt = make_stt(cfg, [self.name])
         tts = None
         if cfg.tts_engine != "elevenlabs" or cfg.elevenlabs_api_key:
             from .voice.tts import make_tts

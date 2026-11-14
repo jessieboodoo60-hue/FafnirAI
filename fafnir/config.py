@@ -60,6 +60,9 @@ class VoiceConfig:
     tts_model: str
     deepgram_api_key: str
     elevenlabs_api_key: str
+    stt_engine: str = "local"      # "local" (Whisper on this PC) or "deepgram" (cloud)
+    stt_local_model: str = "small.en"
+    barge_in: bool = True          # on headphones: just start talking to cut Fafnir off
     tts_engine: str = "kokoro"     # "kokoro" (offline, no key) or "elevenlabs"
     kokoro_voice: str = "am_onyx"
     kokoro_pitch: float = -3.0
@@ -80,7 +83,7 @@ class VoiceConfig:
 
     def missing_keys(self) -> list[str]:
         missing = []
-        if not self.deepgram_api_key:
+        if self.stt_engine == "deepgram" and not self.deepgram_api_key:
             missing.append("DEEPGRAM_API_KEY")
         if self.tts_engine == "elevenlabs" and not self.elevenlabs_api_key:
             missing.append("ELEVENLABS_API_KEY")
@@ -159,6 +162,9 @@ def _voice(raw: dict) -> VoiceConfig:
         tts_model=tts.get("model", "eleven_flash_v2_5"),
         deepgram_api_key=os.environ.get("DEEPGRAM_API_KEY", "").strip(),
         elevenlabs_api_key=os.environ.get("ELEVENLABS_API_KEY", "").strip(),
+        stt_engine=str(stt.get("engine", "local")),
+        stt_local_model=str(stt.get("local_model", "small.en")),
+        barge_in=bool(v.get("barge_in", True)),
         tts_engine=str(tts.get("engine", "kokoro")),
         kokoro_voice=str(tts.get("kokoro_voice", "am_onyx")),
         kokoro_pitch=float(tts.get("kokoro_pitch", -3.0)),
