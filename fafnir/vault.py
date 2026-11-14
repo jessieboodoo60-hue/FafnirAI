@@ -40,13 +40,21 @@ def _dpapi(data: bytes, protect: bool) -> bytes:
         kernel32.LocalFree(out.pbData)
 
 
+_key_cache: dict[str, bytes] = {}
+
+
 def get_key(create: bool = True) -> bytes:
-    """The 32-byte data key. Created on first use (and a one-time recovery copy written)."""
+    """The 32-byte data key. Created on first use (and a one-time recovery copy written).
+    Unwrapped once per run and kept in this process's memory only."""
+    if "k" in _key_cache:
+        return _key_cache["k"]
     if KEY_FILE.exists():
-        return _dpapi(KEY_FILE.read_bytes(), protect=False)
+        _key_cache["k"] = _dpapi(KEY_FILE.read_bytes(), protect=False)
+        return _key_cache["k"]
     if not create:
         raise OSError("No vault key yet.")
     key = os.urandom(32)
+    _key_cache["k"] = key
     KEY_FILE.parent.mkdir(parents=True, exist_ok=True)
     KEY_FILE.write_bytes(_dpapi(key, protect=True))
     RECOVERY_FILE.write_text(
@@ -60,6 +68,57 @@ def get_key(create: bool = True) -> bytes:
         "Restore with:  python main.py --restore-backup <file> --key <this key>\n",
         encoding="utf-8")
     return key
+
+
+def _write_recovery(key: bytes) -> None:
+    RECOVERY_FILE.write_text(
+        "FAFNIR RECOVERY KEY\n===================\n"
+        "This key unlocks Fafnir's encrypted data and backups on ANY computer.\n\n"
+        "1. Copy the key below into a password manager, or onto a USB stick kept somewhere safe.\n"
+        "2. Then DELETE this file.\n\n"
+        f"{base64.urlsafe_b64encode(key).decode()}\n\n"
+        "Restore a backup with:  python main.py --restore-backup <file> --key <this key>\n", encoding="utf-8")
+
+
+def rotate(files: list) -> dict:
+    """Replace the data key. Every file is decrypted with the old key and re-encrypted with a new
+    one; nothing is swapped in until every new copy has been proven to decrypt. The old recovery
+    key stops working for these files; a new RECOVERY_KEY.txt is written. (Old backups keep
+    needing the old key.) Run with Fafnir closed."""
+    from pathlib import Path
+    old = get_key(create=False)
+    new = os.urandom(32)
+    staged = []
+    for f in (Path(x) for x in files):
+        if not f.exists():
+            continue
+        data = f.read_bytes()
+        if data.startswith(MAGIC):                       # a whole encrypted file
+            out = encrypt(decrypt(data, old), new)
+            check = lambda b, plain=decrypt(data, old): decrypt(b, new) == plain
+        else:                                            # a log encrypted line by line
+            lines = data.decode("utf-8").splitlines()
+            conv = [LINE_PREFIX + base64.b64encode(encrypt(decrypt(base64.b64decode(ln[len(LINE_PREFIX):]), old), new)).decode("ascii")
+                    if ln.startswith(LINE_PREFIX) else ln for ln in lines]
+            out = ("\n".join(conv) + "\n").encode("utf-8")
+            check = lambda b, n=len(lines): len(b.decode("utf-8").splitlines()) == n
+        tmp = f.with_name(f.name + ".rotating")
+        tmp.write_bytes(out)
+        if not check(tmp.read_bytes()):
+            for t, _ in staged + [(tmp, f)]:
+                t.unlink(missing_ok=True)
+            raise OSError(f"Rotation stopped: {f.name} didn't verify. Nothing was changed.")
+        staged.append((tmp, f))
+    key_tmp = KEY_FILE.with_name(KEY_FILE.name + ".rotating")
+    key_tmp.write_bytes(_dpapi(new, protect=True))
+    if _dpapi(key_tmp.read_bytes(), protect=False) != new:
+        raise OSError("Rotation stopped: the new key didn't verify. Nothing was changed.")
+    os.replace(key_tmp, KEY_FILE)                        # commit point
+    for tmp, f in staged:
+        os.replace(tmp, f)
+    _key_cache["k"] = new
+    _write_recovery(new)
+    return {"files_re_encrypted": len(staged)}
 
 
 def key_from_recovery(text: str) -> bytes:
@@ -84,3 +143,39 @@ def decrypt(blob: bytes, key: bytes | None = None) -> bytes:
 
 
 MAGIC = b"FAFNIR-ENC-1\n"
+LINE_PREFIX = "enc1:"
+
+
+def is_encrypted(path) -> bool:
+    try:
+        with open(path, "rb") as f:
+            return f.read(len(MAGIC)) == MAGIC
+    except OSError:
+        return False
+
+
+def read_text(path) -> str:
+    """A text file that may be encrypted (new) or plain (written before encryption was added)."""
+    from pathlib import Path
+    data = Path(path).read_bytes()
+    return decrypt(data).decode("utf-8") if data.startswith(MAGIC) else data.decode("utf-8")
+
+
+def write_text(path, text: str) -> None:
+    """Write a text file encrypted, atomically."""
+    from pathlib import Path
+    p = Path(path)
+    p.parent.mkdir(parents=True, exist_ok=True)
+    tmp = p.with_name(p.name + ".tmp")
+    tmp.write_bytes(encrypt(text.encode("utf-8")))
+    os.replace(tmp, p)
+
+
+def encrypt_line(text: str) -> str:
+    """One line of an append-only log, encrypted on its own (so appending stays cheap)."""
+    return LINE_PREFIX + base64.b64encode(encrypt(text.encode("utf-8"))).decode("ascii")
+
+
+def decrypt_line(line: str) -> str:
+    """Reverse of encrypt_line; plain lines (from before) pass through unchanged."""
+    return decrypt(base64.b64decode(line[len(LINE_PREFIX):])).decode("utf-8") if line.startswith(LINE_PREFIX) else line

@@ -126,6 +126,15 @@ It asks you to say "Fafnir" 6 times. The recordings stay in `data\wake\` (not up
 
 **Conversation mode:** after you say "Fafnir" once, just keep talking: after every reply Fafnir listens for 12 seconds more (15 after a question) without the wake word, and each exchange renews it. Noise and its own echo don't end the conversation, talk that isn't meant for it (TV, someone else) is quietly ignored, and "thanks, that's all" / "goodbye" / "never mind" ends it. A soft falling two-note tone means it has stopped listening; say "Fafnir" to start again. Length: `follow_up_seconds` under `[voice.wake]`.
 
+**Security and privacy (details: `docs/SECURITY.md`):**
+- **Secrets** (API keys, bot tokens, the camera password) live in an encrypted vault, not `.env`. Add or change one with `python main.py --secret-set NAME` (hidden input), or put them in a `.env` and run `python main.py --secrets-import`, then delete the `.env`. `--secrets-list` shows names only.
+- **Encrypted at rest:** secrets, memory, conversations, the Google login, private documents and backups.
+- **Action log you can check:** `python main.py --verify-log` reports whether any entry in `logs/actions.log` was edited or removed.
+- **What left the PC:** Settings > Privacy, or ask "what have you sent out?", or read `logs/outbound.log`.
+- **Runaway protection:** a tool that changes things can run 8 times a minute at most.
+- **Retention:** conversations older than 365 days are deleted (`[privacy]` in `config.toml`). `python main.py --conversations-export <folder>` writes readable copies.
+- **Health check:** `python main.py --security-check`. **New key:** `python main.py --rotate-key` (with Fafnir closed).
+
 **Performance profiles (gaming-aware):** Fafnir decides what it keeps on the graphics card. `auto` (default) switches to **Gaming** while a game runs (local models unloaded, voice made on the processor, about 0.3-0.9 s slower to start speaking), otherwise **Balanced** (the 4B local model + voice) or **AI Performance** (the 8B model, only when about 6 GB of graphics memory is free). Say "gaming mode", "balanced mode", "AI performance mode" or "back to auto", or set `profile` under `[performance]` in `config.toml`. With the cloud brain (today's setting) only the voice moves. With the local brain, requests made in Gaming go to the cloud brain according to `gaming_brain` (`ask` each time, `cloud`, or `off`).
 
 **Private documents vault:** `C:\Personal Information` (passport, IDs) is kept as one encrypted file, `personal-information.vault`; file names are hidden too. Fafnir can use the documents only after asking you, every single time, even if you just asked for the thing that needs them. On your yes they're decrypted into `_unlocked` inside that folder; they lock again (re-encrypted, open copies wiped) when Fafnir is done, after 5 minutes at most, when the kill switch is hit, and at start-up if a crash left them open. To add a document: ask Fafnir to unlock, drop the file into `_unlocked`, and say "lock my private files". The vault uses the same key as backups, so keep the recovery key safe.

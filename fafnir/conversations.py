@@ -1,8 +1,12 @@
-"""A plain log of what was said, so Fafnir remembers recent conversations across restarts.
+"""A log of what was said, so Fafnir remembers recent conversations across restarts.
 
-One JSON-lines file per day in data/conversations/. New conversations start with the last
-day or so of exchanges in the prompt (as background, not instructions), and older ones can
-be searched with the conversation_search tool. The owner can read or delete these files.
+One file per day in data/conversations/. Since 2026-11-13 every line is encrypted on its own
+(AES-256-GCM, fafnir/vault.py), so the files are unreadable on disk but appending stays cheap;
+lines written before that are read as they are until `encrypt_existing()` converts them. New
+conversations start with the last day or so of exchanges in the prompt (as background, not
+instructions), older ones can be searched with conversation_search, and files older than the
+retention period are deleted (`purge_older_than`). `python main.py --conversations-export <dir>`
+writes readable copies for the owner.
 """
 from __future__ import annotations
 
@@ -11,6 +15,8 @@ import re
 import threading
 from datetime import datetime, timedelta
 from pathlib import Path
+
+from . import vault
 
 
 class ConversationLog:
@@ -29,22 +35,66 @@ class ConversationLog:
         with self._lock:
             self.folder.mkdir(parents=True, exist_ok=True)
             with open(self.folder / f"{now:%Y-%m-%d}.jsonl", "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+                f.write(vault.encrypt_line(json.dumps(entry, ensure_ascii=False)) + "\n")
+
+    def day(self, day: str) -> list[dict]:
+        """Every entry from one day ("2026-11-12")."""
+        out = []
+        try:
+            for line in (self.folder / f"{day}.jsonl").read_text(encoding="utf-8").splitlines():
+                try:
+                    out.append(json.loads(vault.decrypt_line(line)))
+                except Exception:
+                    pass   # a damaged line: skip it, keep the rest
+        except OSError:
+            pass
+        return out
 
     def _entries(self, days: int) -> list[dict]:
         out = []
         today = datetime.now().date()
         for i in range(days, -1, -1):
-            p = self.folder / f"{today - timedelta(days=i):%Y-%m-%d}.jsonl"
-            try:
-                for line in p.read_text(encoding="utf-8").splitlines():
-                    try:
-                        out.append(json.loads(line))
-                    except ValueError:
-                        pass
-            except OSError:
-                pass
+            out += self.day(f"{today - timedelta(days=i):%Y-%m-%d}")
         return out
+
+    def encrypt_existing(self) -> int:
+        """Convert any plain lines left from before encryption. Returns how many were converted."""
+        import os
+        n = 0
+        with self._lock:
+            for p in sorted(self.folder.glob("*.jsonl")):
+                lines = p.read_text(encoding="utf-8").splitlines()
+                if all(ln.startswith(vault.LINE_PREFIX) or not ln.strip() for ln in lines):
+                    continue
+                new = [ln if ln.startswith(vault.LINE_PREFIX) or not ln.strip() else vault.encrypt_line(ln) for ln in lines]
+                n += sum(1 for a, b in zip(lines, new) if a != b)
+                tmp = p.with_suffix(".tmp")
+                tmp.write_text("\n".join(new) + "\n", encoding="utf-8")
+                os.replace(tmp, p)
+        return n
+
+    def purge_older_than(self, days: int) -> int:
+        """Delete conversation files older than `days` (0 = keep forever). Returns files removed."""
+        if days <= 0:
+            return 0
+        cutoff = f"{datetime.now().date() - timedelta(days=days):%Y-%m-%d}"
+        gone = 0
+        for p in self.folder.glob("*.jsonl"):
+            if p.stem < cutoff:
+                p.unlink(missing_ok=True)
+                gone += 1
+        return gone
+
+    def export(self, target: Path) -> int:
+        """Readable copies of every day, for the owner."""
+        target = Path(target)
+        target.mkdir(parents=True, exist_ok=True)
+        n = 0
+        for p in sorted(self.folder.glob("*.jsonl")):
+            (target / p.name).write_text("\n".join(json.dumps(e, ensure_ascii=False) for e in self.day(p.stem)) + "\n",
+                                         encoding="utf-8")
+            n += 1
+        return n
 
     def recent(self, hours: float = 36, max_entries: int = 30) -> list[dict]:
         cutoff = (datetime.now() - timedelta(hours=hours)).isoformat()

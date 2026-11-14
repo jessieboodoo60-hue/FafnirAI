@@ -69,10 +69,9 @@ def sync() -> None:
 
 def _log(text: str) -> None:
     try:
-        with open(ROOT / "logs" / "actions.log", "a", encoding="utf-8") as f:
-            f.write(json.dumps({"time": datetime.now().isoformat(timespec="seconds"),
-                                "tool": "KILL_SWITCH", "result": text}) + "\n")
-    except OSError:
+        from . import audit
+        audit.record({"time": datetime.now().isoformat(timespec="seconds"), "tool": "KILL_SWITCH", "result": text})
+    except Exception:
         pass
     print(f"[kill switch] {text}", flush=True)
 

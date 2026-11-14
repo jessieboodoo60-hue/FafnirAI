@@ -319,7 +319,8 @@ def _post_voice_message(token: str, channel_id: int, ogg: bytes, text: str) -> N
 
 
 def make_bridge(engine, notices, on_status, name: str):
-    token = os.environ.get("DISCORD_BOT_TOKEN", "").strip()
+    from . import secretstore
+    token = secretstore.get("DISCORD_BOT_TOKEN")
     if not token:
         return None
     try:

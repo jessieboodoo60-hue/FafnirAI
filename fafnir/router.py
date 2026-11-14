@@ -39,6 +39,7 @@ HINTS = {
     "calendar_list_events": "what's on my calendar, my schedule, meetings today or tomorrow",
     "private_files_unlock": "passport, national ID card, driver's permit, birth certificate, personal information, "
                             "my ID number, identity documents",
+    "privacy_report": "what have you sent out, did anything leave my PC, what data did you share, outbound requests",
     "software_install": "install a program, app or game",
     "software_uninstall": "uninstall or remove a program, app or game",
 }

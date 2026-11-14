@@ -46,9 +46,10 @@ def _text(el: ET.Element | None, path: str, default: str = "") -> str:
 
 class DVR:
     def __init__(self):
-        self.host = os.environ.get("HIKVISION_HOST", "192.168.100.191").strip() or "192.168.100.191"
-        self.user = os.environ.get("HIKVISION_USERNAME", "").strip()
-        self.password = os.environ.get("HIKVISION_PASSWORD", "").strip()
+        from .. import secretstore
+        self.host = secretstore.get("HIKVISION_HOST") or "192.168.100.191"
+        self.user = secretstore.get("HIKVISION_USERNAME")
+        self.password = secretstore.get("HIKVISION_PASSWORD")
         self._client: httpx.Client | None = None
 
     def client(self) -> httpx.Client:

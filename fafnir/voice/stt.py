@@ -32,7 +32,15 @@ class DeepgramSTT:
             headers={"Authorization": f"Token {api_key}"}, timeout=30.0
         )
 
+    def _note(self, why: str, size: int = 0) -> None:
+        try:
+            from .. import audit
+            audit.outbound("Deepgram (speech-to-text)", why, size)
+        except Exception:
+            pass
+
     def transcribe(self, wav_bytes: bytes, content_type: str = "audio/wav") -> str:
+        self._note("a recording of your voice", len(wav_bytes))
         """Give me audio, get back text ("" if nothing was said)."""
         for attempt in (1, 2):  # one retry: home connections drop the odd request
             try:
@@ -60,6 +68,7 @@ class DeepgramSTT:
             raise STTError("Deepgram returned an unexpected response.")
 
     def start_live(self, sample_rate: int) -> "LiveSession":
+        self._note("live audio of your voice")
         params = dict(self.params, encoding="linear16", sample_rate=sample_rate, channels=1)
         return LiveSession(f"{DEEPGRAM_WSS}?{urlencode(params, doseq=True)}", self.api_key)
 

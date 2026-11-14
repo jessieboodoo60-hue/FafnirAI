@@ -47,7 +47,9 @@ class GoogleAuth:
         if not self.credentials_path.exists():
             raise GoogleNotReady(SETUP_HELP.format(path=self.credentials_path))
         print("\n[Google] A browser window is opening. Approve access there (waiting up to 3 minutes)...\n", flush=True)
-        flow = InstalledAppFlow.from_client_secrets_file(str(self.credentials_path), SCOPES)
+        import json
+        from . import vault
+        flow = InstalledAppFlow.from_client_config(json.loads(vault.read_text(self.credentials_path)), SCOPES)
         try:
             creds = flow.run_local_server(
                 port=0, open_browser=True, timeout_seconds=180,
@@ -65,8 +67,10 @@ class GoogleAuth:
             creds = self._creds
             if creds is None and self.token_path.exists():
                 try:
-                    creds = Credentials.from_authorized_user_file(str(self.token_path), SCOPES)
-                except (ValueError, OSError):
+                    import json
+                    from . import vault
+                    creds = Credentials.from_authorized_user_info(json.loads(vault.read_text(self.token_path)), SCOPES)
+                except Exception:
                     creds = None
             if creds is not None and not creds.valid:
                 if creds.expired and creds.refresh_token:
@@ -80,7 +84,8 @@ class GoogleAuth:
                 creds = self._login()
                 self._services.clear()
             self.token_path.parent.mkdir(parents=True, exist_ok=True)
-            self.token_path.write_text(creds.to_json(), encoding="utf-8")
+            from . import vault
+            vault.write_text(self.token_path, creds.to_json())   # the login token, encrypted
             self._creds = creds
             return creds
 

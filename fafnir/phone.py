@@ -54,10 +54,11 @@ class WhatsAppBridge:
     def __init__(self, engine, notices, settings: dict, on_status: Callable[[str], None] = lambda s: None,
                  name: str = "Fafnir"):
         self.engine, self.notices, self.on_status, self.name = engine, notices, on_status, name
-        self.token = os.environ.get("WHATSAPP_TOKEN", "").strip()
-        self.number_id = os.environ.get("WHATSAPP_PHONE_NUMBER_ID", "").strip()
-        self.app_secret = os.environ.get("WHATSAPP_APP_SECRET", "").strip()
-        self.owner = _digits(os.environ.get("WHATSAPP_OWNER_NUMBER", ""))
+        from . import secretstore
+        self.token = secretstore.get("WHATSAPP_TOKEN")
+        self.number_id = secretstore.get("WHATSAPP_PHONE_NUMBER_ID")
+        self.app_secret = secretstore.get("WHATSAPP_APP_SECRET")
+        self.owner = _digits(secretstore.get("WHATSAPP_OWNER_NUMBER"))
         self.version = settings.get("graph_version", "v23.0")
         self.port = int(settings.get("port", 8787))
         self.domain = str(settings.get("ngrok_domain", "")).strip().removeprefix("https://").strip("/")
@@ -324,6 +325,7 @@ def make_bridge(engine, notices, on_status, name: str):
         settings = {}
     if not settings.get("enabled", True):
         return None
-    if not any(os.environ.get(k) for k in ("WHATSAPP_TOKEN", "WHATSAPP_PHONE_NUMBER_ID")):
+    from . import secretstore
+    if not any(secretstore.get(k) for k in ("WHATSAPP_TOKEN", "WHATSAPP_PHONE_NUMBER_ID")):
         return None  # not set up yet: stay quiet
     return WhatsAppBridge(engine, notices, settings, on_status, name)

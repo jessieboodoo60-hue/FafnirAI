@@ -164,6 +164,7 @@ class Engine:
         self._start_killswitch()
         self._start_resources()
         threading.Thread(target=self._summarize_loop, daemon=True, name="summaries").start()
+        threading.Thread(target=self._retention, daemon=True, name="retention").start()
         threading.Thread(target=self._warm_up, daemon=True, name="warm-up").start()
         if self.voice and (self.cfg.voice.mic_preference or self.cfg.voice.mic_for_speaker):
             threading.Thread(target=self._watch_mics, daemon=True, name="mic-watch").start()
@@ -217,6 +218,33 @@ class Engine:
         if len(heard) < 2:
             return False
         return sum(w in mine for w in heard) / len(heard) >= 0.7
+
+    # ---- data retention: old conversations and logs are deleted on a schedule ----
+    def _retention(self) -> None:
+        import re
+        from datetime import datetime, timedelta
+        from .config import ROOT
+        from .tools import CONVERSATIONS
+        p = self.cfg.privacy
+        try:
+            gone = CONVERSATIONS.purge_older_than(p.keep_conversations_days)
+            if gone:
+                print(f"[privacy] deleted {gone} conversation file(s) older than {p.keep_conversations_days} days", flush=True)
+            if p.keep_logs_days > 0:   # these logs start each line with a timestamp or carry a "time" field
+                cutoff = (datetime.now() - timedelta(days=p.keep_logs_days)).isoformat()[:10]
+                for name in ("outbound.log", "wake.log", "heartbeat.log"):
+                    f = ROOT / "logs" / name
+                    if not f.exists():
+                        continue
+                    lines = f.read_text(encoding="utf-8", errors="replace").splitlines()
+                    def recent(ln: str) -> bool:   # keep anything without a readable date
+                        m = re.search(r"\d{4}-\d{2}-\d{2}", ln[:40])
+                        return m is None or m.group(0) >= cutoff
+                    keep = [ln for ln in lines if recent(ln)]
+                    if len(keep) < len(lines):
+                        f.write_text("\n".join(keep) + "\n", encoding="utf-8")
+        except Exception as e:
+            print(f"[privacy] retention skipped: {type(e).__name__}: {e}", flush=True)
 
     # ---- summaries of older conversations (local model, background) ----
     def _summarize_loop(self) -> None:

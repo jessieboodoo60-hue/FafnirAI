@@ -146,6 +146,10 @@ class Registry:
         tool = self._tools.get(name)
         if tool is None:
             return f"No tool named '{name}'.", True
+        limited = self._rate_limited(name, tool.gated)
+        if limited:
+            self._log(name, args, limited, True, None)
+            return limited, True
         approved = None
         try:
             if isinstance(args, dict) and OWNER_ASKED in args:
@@ -185,6 +189,29 @@ class Registry:
         self._log(name, args_for_log, text, False, approved)
         return text, False
 
+    # A runaway loop (a confused model calling the same thing over and over) is stopped here.
+    RATE_WINDOW = 60.0
+    RATE_NORMAL = 40      # calls per minute for a read-only tool
+    RATE_GATED = 8        # calls per minute for a tool that changes, sends or deletes something
+    RATE_TOTAL = 120      # all tools together
+
+    def _rate_limited(self, name: str, gated: bool) -> str | None:
+        import time
+        now = time.monotonic()
+        with self._log_lock:
+            calls = getattr(self, "_calls", None)
+            if calls is None:
+                calls = self._calls = {}
+            for k in list(calls):
+                calls[k] = [t for t in calls[k] if now - t < self.RATE_WINDOW]
+            mine, total = calls.setdefault(name, []), sum(len(v) for v in calls.values())
+            limit = self.RATE_GATED if gated else self.RATE_NORMAL
+            if len(mine) >= limit or total >= self.RATE_TOTAL:
+                return (f"Rate limit: '{name}' was called {len(mine)} times in the last minute "
+                        f"(limit {limit}). Stop and tell the owner instead of retrying.")
+            mine.append(now)
+        return None
+
     def take_images(self) -> list[bytes]:
         """PNG images (e.g. screenshots) produced by this thread's most recent run(), then cleared."""
         imgs = getattr(self._local, "images", [])
@@ -201,9 +228,10 @@ class Registry:
         if approved is not None:
             entry["confirmed"] = approved
         try:
-            with self._log_lock:
-                self.log_path.parent.mkdir(parents=True, exist_ok=True)
-                with open(self.log_path, "a", encoding="utf-8") as f:
-                    f.write(json.dumps(entry, ensure_ascii=False, default=str) + "\n")
+            from .. import audit
+            audit.record(entry, self.log_path)          # tamper-evident: each entry is chained to the last
+            dest = None if is_error else audit.tool_destination(name)
+            if dest:
+                audit.outbound(dest, name, len(json.dumps(args, default=str)))
         except OSError:
             pass

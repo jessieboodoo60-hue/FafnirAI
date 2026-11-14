@@ -7,6 +7,8 @@ from .agent import Agent
 from .common import build_agent, cost_line, describe_tool_call, is_yes
 from .config import ConfigError, load_config
 from .llm import LLMError
+from pathlib import Path
+
 from .memory import MemoryStore
 
 HELP = "Commands: /reset (new conversation), /memory (what I remember), /tools, /quit, /help"
@@ -57,6 +59,62 @@ def main(argv: list[str] | None = None) -> int:
         from . import killswitch
         print("Kill switch released." if killswitch.release("command line") else "The kill switch wasn't on.")
         return
+    if "--security-check" in argv:
+        from .security_check import main as check_main
+        return check_main()
+    if "--verify-log" in argv:
+        from . import audit
+        v = audit.verify()
+        print("Action log: " + (f"intact, {v['entries']} hashed entries" if v["ok"] else
+                                f"TAMPERED or damaged: first problem at line {v['first_problem_line']} "
+                                f"({v['problem_lines']} lines)") +
+              (f" ({v['older_unhashed_entries']} older entries from before hashing)" if v.get("older_unhashed_entries") else ""))
+        return 0 if v["ok"] else 2
+    if "--secrets-import" in argv:
+        from . import secretstore
+        i = argv.index("--secrets-import")
+        src = argv[i + 1] if i + 1 < len(argv) and not argv[i + 1].startswith("--") else None
+        r = secretstore.import_env(src)
+        print(f"Moved {len(r['imported'])} secrets into the encrypted vault: {', '.join(r['imported'])}")
+        print("Each one read back correctly." if r["verified"] else "WARNING: some did not read back; keep your .env.")
+        print("Now delete the .env file (it still holds them in plain text).")
+        return 0 if r["verified"] else 1
+    if "--secret-set" in argv:
+        import getpass
+        from . import secretstore
+        i = argv.index("--secret-set")
+        if i + 1 >= len(argv):
+            print("Usage: python main.py --secret-set NAME   (you'll be asked for the value; it isn't shown)")
+            return 1
+        secretstore.set_value(argv[i + 1], getpass.getpass(f"Value for {argv[i + 1]} (hidden; empty removes it): "))
+        print(f"{argv[i + 1]} saved in the encrypted vault. Restart Fafnir to use it.")
+        return 0
+    if "--secrets-list" in argv:
+        from . import secretstore
+        print("Secrets in the vault (names only):", ", ".join(secretstore.names()) or "(none)")
+        return 0
+    if "--conversations-export" in argv:
+        from .tools import CONVERSATIONS
+        i = argv.index("--conversations-export")
+        if i + 1 >= len(argv):
+            print("Usage: python main.py --conversations-export <folder>")
+            return 1
+        print(f"Wrote {CONVERSATIONS.export(argv[i + 1])} day files to {argv[i + 1]} (plain text: delete them when you're done).")
+        return 0
+    if "--rotate-key" in argv:
+        from . import vault
+        from .config import ROOT, load_config
+        data = ROOT / "data"
+        files = [data / "secrets.vault", data / "memory.vault", data / "google_token.json", data / "google_credentials.json"]
+        files += sorted((data / "conversations").glob("*.jsonl"))
+        pf = load_config().tools.private_folder
+        if pf:
+            files.append(Path(pf) / "personal-information.vault")
+        files = [f for f in files if f.exists() and (vault.is_encrypted(f) or f.suffix == ".jsonl")]
+        r = vault.rotate(files)
+        print(f"New key in place; {r['files_re_encrypted']} files re-encrypted. A new RECOVERY_KEY.txt was written: "
+              "save that key somewhere safe and delete the file. Older backups still need the OLD recovery key.")
+        return 0
     if "--memory-export" in argv or "--memory-import" in argv:
         from .config import ROOT
         flag = "--memory-export" if "--memory-export" in argv else "--memory-import"

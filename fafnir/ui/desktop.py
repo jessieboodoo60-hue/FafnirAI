@@ -132,8 +132,10 @@ class DesktopBridge(QObject):
         from .. import config_edit
         try:
             when = {f"{s}.{k}": spec[2] for (s, k), spec in config_edit.EDITABLE.items()}
+            from .. import audit
             self.emit("result", id=req, ok=True, data={"values": config_edit.current(), "when": when,
-                                                      "restartNeeded": self.w.restart_needed})
+                                                      "restartNeeded": self.w.restart_needed,
+                                                      "outbound": audit.outbound_summary(24)})
         except Exception as e:
             self.emit("result", id=req, ok=False, error=f"Couldn't read config.toml: {e}")
 

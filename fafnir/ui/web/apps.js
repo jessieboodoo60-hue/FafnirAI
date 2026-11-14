@@ -237,6 +237,8 @@ const RENDER = {
         ${row("Wallpaper", `<div class="swatches">${sw.map(([k, g, n]) => `<button class="swatch ${wp === k ? "on" : ""}" data-wp="${k}" style="background:${g}" title="${n}"></button>`).join("")}</div>`)}
         ${row("Your own picture", `<input class="field set-text" data-k="app.background" placeholder="C:/Users/you/Pictures/wall.jpg" value="${esc(v["app.background"] || "")}" style="max-width:320px">`)}
         ${row("Monitor", seg("app.screen", [["right", "Right"], ["left", "Left"], ["above", "Above"], ["primary", "Main"]]), "app.screen")}</div>
+      <div class="sec">Privacy · sent off this PC in the last 24 hours</div><div class="set-group">
+        ${Object.keys(C.outbound || {}).length ? Object.entries(C.outbound).map(([to, d]) => row(`${esc(to)}<div class="set-note">${esc((d.why || []).join(", "))}</div>`, `<span class="k">${d.requests} request${d.requests === 1 ? "" : "s"}${d.kb ? " · " + d.kb + " KB" : ""}</span>`)).join("") : row("Nothing left this PC", `<span class="k">All local</span>`)}</div>
       <div class="sec">Notifications</div><div class="set-group">${row("Pause notices (do not disturb)", `<button class="switch ${S.paused ? "on" : ""}" id="set-dnd"></button>`)}</div>
       <div class="sec">About</div><div class="set-group">${row(esc(S.name), `<span class="k">Your assistant · runs on this PC</span>`)}
         ${row("Shortcuts", `<button class="btn" id="set-keys">Show</button>`)}</div>`;

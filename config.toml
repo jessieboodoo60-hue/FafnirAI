@@ -43,6 +43,12 @@ keep_alive = "30m"
 # The smaller, faster model the Balanced profile uses (fits beside OBS and other apps).
 fast = "qwen3:4b-instruct"
 
+[privacy]
+# Conversation files older than this many days are deleted (0 = keep forever).
+keep_conversations_days = 365
+# The outbound, wake-word and heartbeat logs are trimmed to this many days (0 = keep everything).
+keep_logs_days = 180
+
 [performance]
 # What Fafnir may keep on the graphics card. "auto" decides by itself:
 #   gaming         - a game is running: local models unloaded, voice made on the processor

@@ -27,15 +27,9 @@ PROMPT = ("Below is one day's conversation between the owner and their assistant
 
 
 def day_transcript(folder: Path, day: str) -> tuple[str, int]:
-    f = Path(folder) / f"{day}.jsonl"
-    if not f.exists():
-        return "", 0
+    from .conversations import ConversationLog
     lines = []
-    for raw in f.read_text(encoding="utf-8").splitlines():
-        try:
-            e = json.loads(raw)
-        except ValueError:
-            continue
+    for e in ConversationLog(Path(folder)).day(day):
         who = "Owner" if e.get("role") == "user" else "Fafnir"
         lines.append(f"{who}: {str(e.get('text', ''))[:400]}")
     text = "\n".join(lines)

@@ -102,6 +102,12 @@ class LocalConfig:
 
 
 @dataclass(frozen=True)
+class PrivacyConfig:
+    keep_conversations_days: int = 365   # older conversation files are deleted (0 = keep forever)
+    keep_logs_days: int = 180            # outbound / wake / app logs older than this are trimmed (0 = keep)
+
+
+@dataclass(frozen=True)
 class PerformanceConfig:
     """Gaming-aware use of the graphics card (fafnir/resources.py)."""
     profile: str = "auto"          # auto | gaming | balanced | ai_performance
@@ -130,6 +136,7 @@ class Config:
     anthropic_api_key: str
     local: LocalConfig = LocalConfig()
     performance: PerformanceConfig = PerformanceConfig()
+    privacy: PrivacyConfig = PrivacyConfig()
 
 
 def _tools(raw: dict) -> ToolsConfig:
@@ -160,8 +167,8 @@ def _voice(raw: dict) -> VoiceConfig:
         stt_language=stt.get("language", "en"),
         tts_voice_id=tts.get("voice_id", ""),
         tts_model=tts.get("model", "eleven_flash_v2_5"),
-        deepgram_api_key=os.environ.get("DEEPGRAM_API_KEY", "").strip(),
-        elevenlabs_api_key=os.environ.get("ELEVENLABS_API_KEY", "").strip(),
+        deepgram_api_key=_secret("DEEPGRAM_API_KEY"),
+        elevenlabs_api_key=_secret("ELEVENLABS_API_KEY"),
         stt_engine=str(stt.get("engine", "local")),
         stt_local_model=str(stt.get("local_model", "small.en")),
         barge_in=bool(v.get("barge_in", True)),
@@ -180,8 +187,12 @@ def _voice(raw: dict) -> VoiceConfig:
     )
 
 
+def _secret(name: str) -> str:
+    from . import secretstore   # the encrypted vault (falls back to a leftover .env)
+    return secretstore.get(name)
+
+
 def load_config(path: Path | None = None) -> Config:
-    load_dotenv(ROOT / ".env")
     path = path or ROOT / "config.toml"
     try:
         with open(path, "rb") as f:
@@ -191,11 +202,11 @@ def load_config(path: Path | None = None) -> Config:
     except tomllib.TOMLDecodeError as e:
         raise ConfigError(f"config.toml is not valid TOML: {e}")
 
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    key = _secret("ANTHROPIC_API_KEY")
     provider = str(raw.get("model", {}).get("provider", "api")).strip()
     if not key and provider not in ("claude_code", "ollama"):
         raise ConfigError(
-            "ANTHROPIC_API_KEY is not set. Copy .env.example to .env and add your key."
+            "ANTHROPIC_API_KEY is not set. Add it with: python main.py --secret-set ANTHROPIC_API_KEY"
         )
 
     try:
@@ -221,6 +232,8 @@ def load_config(path: Path | None = None) -> Config:
             anthropic_api_key=key,
             local=LocalConfig(**{k: v for k, v in m.get("local", {}).items()
                                  if k in LocalConfig.__dataclass_fields__}),
+            privacy=PrivacyConfig(**{k: int(v) for k, v in raw.get("privacy", {}).items()
+                                     if k in PrivacyConfig.__dataclass_fields__}),
             performance=PerformanceConfig(**{k: (tuple(v) if isinstance(v, list) else v)
                                              for k, v in raw.get("performance", {}).items()
                                              if k in PerformanceConfig.__dataclass_fields__}),
