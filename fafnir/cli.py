@@ -59,6 +59,53 @@ def main(argv: list[str] | None = None) -> int:
         from . import killswitch
         print("Kill switch released." if killswitch.release("command line") else "The kill switch wasn't on.")
         return
+    if any(a in argv for a in ("--vault-list", "--vault-add", "--vault-remove", "--vault-take-out")):
+        from .config import load_config
+        from .tools.private_vault import PrivateVault
+        from .tools.registry import ToolError
+        folder = load_config().tools.private_folder
+        if not folder:
+            print("No private folder is set (private_folder under [tools] in config.toml).")
+            return 1
+        v = PrivateVault(folder)
+
+        def arg(flag, n=1):
+            i = argv.index(flag) + n
+            return argv[i] if i < len(argv) and not argv[i].startswith("--") else None
+        try:
+            if "--vault-list" in argv:
+                files = v.list_files()["files"]
+                print(f"{len(files)} document(s) in the vault:")
+                for f in files:
+                    print(f"  {f['name']}  ({f['kb']} KB)")
+            elif "--vault-add" in argv:
+                if not arg("--vault-add"):
+                    print("Usage: python main.py --vault-add <file or folder> [--keep-original] [--replace]")
+                    return 1
+                r = v.add(arg("--vault-add"), keep_original="--keep-original" in argv, replace="--replace" in argv)
+                print(f"Added: {', '.join(r['added'])}. "
+                      + (f"{r['originals_deleted']} unencrypted original(s) deleted. " if r["originals_deleted"] else "Originals kept. ")
+                      + f"The vault now holds {r['now_in_vault']}.")
+            elif "--vault-take-out" in argv:
+                if not arg("--vault-take-out") or not arg("--vault-take-out", 2):
+                    print("Usage: python main.py --vault-take-out <name> <folder to save it in>")
+                    return 1
+                r = v.remove(arg("--vault-take-out"), keep_copy_in=arg("--vault-take-out", 2))
+                print(f"Took out {r['removed']}; an UNENCRYPTED copy is at {r['unencrypted_copy_at']}. "
+                      f"{r['left_in_vault']} left in the vault.")
+            else:
+                if not arg("--vault-remove"):
+                    print("Usage: python main.py --vault-remove <name>")
+                    return 1
+                if input(f"Permanently delete '{arg('--vault-remove')}' from the vault? Type yes: ").strip().lower() != "yes":
+                    print("Nothing was removed.")
+                    return 0
+                r = v.remove(arg("--vault-remove"))
+                print(f"Deleted {r['removed']} from the vault. {r['left_in_vault']} left.")
+        except ToolError as e:
+            print(str(e))
+            return 1
+        return 0
     if "--security-check" in argv:
         from .security_check import main as check_main
         return check_main()

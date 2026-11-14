@@ -32,6 +32,7 @@ from .registry import Registry, Tool, ToolError
 VAULT_NAME = "personal-information.vault"
 UNLOCKED_NAME = "_unlocked"
 AUTO_LOCK_SECONDS = 300
+MAX_ADD_MB = 500          # the vault is rebuilt in memory on every change; it's for documents
 
 
 def _sha(data: bytes) -> str:
@@ -185,6 +186,109 @@ class PrivateVault:
                                 "Close them and lock again.")
             return {"locked": True, "files": len(hashes)}
 
+    # ---- adding and removing documents (done in memory: nothing is decrypted onto the disk) ----
+    def _contents(self) -> dict[str, bytes]:
+        if not self.vault_file.exists():
+            return {}
+        with zipfile.ZipFile(io.BytesIO(vault.decrypt(self.vault_file.read_bytes()))) as z:
+            return {n: z.read(n) for n in z.namelist()}
+
+    def _store(self, files: dict[str, bytes]) -> None:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_STORED) as z:
+            for name in sorted(files):
+                z.writestr(name, files[name])
+        self._write_vault(buf.getvalue(), {n: _sha(d) for n, d in files.items()})   # verified before it replaces the old one
+
+    def _match(self, files: dict[str, bytes], name: str) -> str:
+        want = name.strip().lower().replace("\\", "/")
+        exact = [n for n in files if n.lower() == want]
+        hits = exact or [n for n in files if want in n.lower()]
+        if len(hits) == 1:
+            return hits[0]
+        listing = ", ".join(sorted(files)) or "(the vault is empty)"
+        raise ToolError((f"Nothing in the vault matches '{name}'." if not hits else
+                         f"'{name}' matches several: {', '.join(sorted(hits))}. Be more specific.") + f" In the vault: {listing}")
+
+    def list_files(self) -> dict:
+        with self._lock:
+            files = self._contents()
+            return {"files": [{"name": n, "kb": round(len(d) / 1024)} for n, d in sorted(files.items())],
+                    "note": "Names only; the vault stayed locked."}
+
+    def add(self, path: str, keep_original: bool = False, replace: bool = False) -> dict:
+        """Put a file (or every file in a folder) into the vault. Unless keep_original is set, the
+        unencrypted original is wiped afterwards, but only once the vault copy is proven identical."""
+        src = Path(os.path.expandvars(os.path.expanduser(str(path).strip().strip('"'))))
+        if not src.exists():
+            raise ToolError(f"There's no file or folder at {src}.")
+        if self.folder in src.resolve().parents or src.resolve() == self.folder:
+            raise ToolError("That is already inside the private documents folder.")
+        sources = [src] if src.is_file() else [p for p in sorted(src.rglob("*")) if p.is_file()]
+        if not sources:
+            raise ToolError(f"{src} has no files in it.")
+        if sum(p.stat().st_size for p in sources) > MAX_ADD_MB * 1024 * 1024:
+            raise ToolError(f"That's more than {MAX_ADD_MB} MB; the vault is meant for documents, not large media.")
+        with self._lock:
+            if self.is_unlocked:
+                self.lock()
+            files = self._contents()
+            new = {}
+            for p in sources:
+                name = p.name if src.is_file() else f"{src.name}/{p.relative_to(src).as_posix()}"
+                if name in files and not replace:
+                    raise ToolError(f"'{name}' is already in the vault. Say to replace it if that's what you want.")
+                new[name] = p.read_bytes()
+            files.update(new)
+            self._store(files)
+            check = self._contents()                       # read it back before touching any original
+            if any(_sha(check.get(n, b"")) != _sha(d) for n, d in new.items()):
+                raise ToolError("The vault copy didn't match, so the originals were left alone.")
+            wiped = 0
+            if not keep_original:
+                for p in sources:
+                    _wipe(p)
+                    wiped += 1
+                if src.is_dir():
+                    for d in sorted((x for x in src.rglob("*") if x.is_dir()), reverse=True):
+                        try:
+                            d.rmdir()
+                        except OSError:
+                            pass
+                    try:
+                        src.rmdir()
+                    except OSError:
+                        pass
+            return {"added": sorted(new), "originals_deleted": wiped, "now_in_vault": len(files)}
+
+    def remove(self, name: str, keep_copy_in: str = "") -> dict:
+        """Take a document out of the vault. With keep_copy_in, an unencrypted copy is written to
+        that folder first; without it, the document is gone for good."""
+        with self._lock:
+            if self.is_unlocked:
+                self.lock()
+            files = self._contents()
+            target = self._match(files, name)
+            saved = ""
+            if keep_copy_in:
+                dest = Path(os.path.expandvars(os.path.expanduser(keep_copy_in.strip().strip('"'))))
+                dest.mkdir(parents=True, exist_ok=True)
+                out = dest / Path(target).name
+                if out.exists():
+                    raise ToolError(f"{out} already exists; choose another folder.")
+                out.write_bytes(files[target])
+                if _sha(out.read_bytes()) != _sha(files[target]):
+                    out.unlink(missing_ok=True)
+                    raise ToolError("The copy didn't write correctly, so nothing was removed.")
+                saved = str(out)
+            del files[target]
+            if files:
+                self._store(files)
+            else:   # the last document: leave an empty vault rather than a stale one
+                self._store({})
+            return {"removed": target, "unencrypted_copy_at": saved or None, "left_in_vault": len(files),
+                    "note": "The copy outside the vault is NOT encrypted." if saved else "Deleted from the vault for good."}
+
     def _auto_lock(self) -> None:
         try:
             self.lock()
@@ -217,6 +321,37 @@ def register(reg: Registry, folder: str | Path | None) -> PrivateVault | None:
     reg.register(Tool(name="private_files_lock", handler=v.lock, properties={},
                       description="Lock the owner's private documents again (re-encrypt and wipe the open copies). "
                                   "Call this as soon as you've finished with them."))
+    reg.register(Tool(
+        name="private_files_list", handler=v.list_files, properties={},
+        description="The names of the documents in the owner's private vault (not their contents). The owner is "
+                    "ALWAYS asked first. Use for 'what's in my vault'.",
+        critical_if=lambda a: "Show the names of the documents in your private vault.",
+    ))
+    reg.register(Tool(
+        name="private_files_add", handler=v.add, required=["path"],
+        description="Put a file or folder into the owner's encrypted private vault (passport scans, IDs, certificates, "
+                    "anything personal). By default the unencrypted original is deleted once the vault copy is verified. "
+                    "The owner is ALWAYS asked first. Use for 'add this to my vault', 'put my new permit in the vault'.",
+        properties={"path": {"type": "string", "description": "Full path of the file or folder to add."},
+                    "keep_original": {"type": "boolean", "description": "Leave the unencrypted original where it is. Default false."},
+                    "replace": {"type": "boolean", "description": "Overwrite a document of the same name already in the vault. Default false."}},
+        critical_if=lambda a: (f"Put {Path(str(a.get('path', 'that file'))).name} into your encrypted private vault"
+                               + (" and keep the unencrypted original." if a.get("keep_original")
+                                  else " and delete the unencrypted original.")
+                               + (" It replaces the one already there." if a.get("replace") else "")),
+    ))
+    reg.register(Tool(
+        name="private_files_remove", handler=v.remove, required=["name"],
+        description="Remove a document from the owner's private vault. Without keep_copy_in it is deleted for good; "
+                    "with keep_copy_in an unencrypted copy is saved in that folder first (taking it out of the vault). "
+                    "The owner is ALWAYS asked first. Part of the name is enough.",
+        properties={"name": {"type": "string", "description": "The document's name, or a distinctive part of it."},
+                    "keep_copy_in": {"type": "string", "description": "Folder to save an unencrypted copy in, e.g. the Desktop. "
+                                                                      "Leave empty to delete permanently."}},
+        critical_if=lambda a: (f"Take '{a.get('name', '')}' out of your private vault and save an unencrypted copy in "
+                               f"{a.get('keep_copy_in')}." if a.get("keep_copy_in") else
+                               f"Permanently delete '{a.get('name', '')}' from your private vault. This can't be undone."),
+    ))
     reg.register(Tool(name="private_files_status", handler=v.status, properties={},
                       description="Whether the owner's private documents vault is locked or unlocked (no contents)."))
     return v

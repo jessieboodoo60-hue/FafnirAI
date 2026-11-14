@@ -37,6 +37,9 @@ HINTS = {
     "google_tasks_list": "what is on my to-do list, my tasks",
     "gmail_search": "check my email, unread emails, latest email, inbox",
     "calendar_list_events": "what's on my calendar, my schedule, meetings today or tomorrow",
+    "private_files_add": "add this file to my vault, put my document in the vault, store my scan safely, lock this file away",
+    "private_files_remove": "remove a document from my vault, take it out of the vault, delete it from the vault",
+    "private_files_list": "what is in my vault, list my private documents",
     "private_files_unlock": "passport, national ID card, driver's permit, birth certificate, personal information, "
                             "my ID number, identity documents",
     "privacy_report": "what have you sent out, did anything leave my PC, what data did you share, outbound requests",
@@ -53,6 +56,7 @@ FAMILIES = [
     {"gmail_search", "gmail_read"},
     {"gmail_send", "contacts_search"},
     {"memory_search", "memory_forget", "memory_update"},
+    {"private_files_add", "private_files_remove", "private_files_list"},
     {"computer_find_files", "computer_read_text_file"},
 ]
 
