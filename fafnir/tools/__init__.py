@@ -38,6 +38,49 @@ def _register_profile_tool(reg: Registry) -> None:
         properties={"mode": {"type": "string", "enum": ["auto", "gaming", "balanced", "ai_performance"]}}))
 
 
+def _register_calculator(reg: Registry) -> None:
+    import ast
+    import math
+    import operator as op
+    from .registry import Tool, ToolError
+
+    ops = {ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul, ast.Div: op.truediv, ast.FloorDiv: op.floordiv,
+           ast.Mod: op.mod, ast.Pow: op.pow, ast.USub: op.neg, ast.UAdd: op.pos}
+    funcs = {"sqrt": math.sqrt, "round": round, "abs": abs, "min": min, "max": max, "floor": math.floor, "ceil": math.ceil}
+
+    def ev(node):
+        if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+            return node.value
+        if isinstance(node, ast.BinOp) and type(node.op) in ops:
+            a, b = ev(node.left), ev(node.right)
+            if isinstance(node.op, ast.Pow) and (abs(b) > 200 or abs(a) > 1e9):
+                raise ToolError("That power is too large.")
+            return ops[type(node.op)](a, b)
+        if isinstance(node, ast.UnaryOp) and type(node.op) in ops:
+            return ops[type(node.op)](ev(node.operand))
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name) and node.func.id in funcs:
+            return funcs[node.func.id](*[ev(a) for a in node.args])
+        raise ToolError("Only numbers and + - * / % ** ( ) sqrt round abs min max floor ceil are allowed.")
+
+    def calculate(expression: str) -> dict:
+        expr = expression.replace("^", "**").replace("x", "*").replace("×", "*").replace("÷", "/").replace(",", "")
+        try:
+            value = ev(ast.parse(expr, mode="eval").body)
+        except ToolError:
+            raise
+        except ZeroDivisionError:
+            raise ToolError("Division by zero.")
+        except Exception:
+            raise ToolError(f"Couldn't read '{expression}' as arithmetic. Write it like 17*23 or (120+35)/5.")
+        return {"expression": expression, "result": round(value, 10) if isinstance(value, float) else value}
+
+    reg.register(Tool(
+        name="calculate", handler=calculate, required=["expression"],
+        description="Exact arithmetic. Use for ANY calculation (multiplying, dividing, percentages, totals) instead of "
+                    "working it out yourself. Give a plain expression like 17*23 or 1250*0.15 or (120+35)/5.",
+        properties={"expression": {"type": "string"}}))
+
+
 def _register_health_tool(reg: Registry) -> None:
     from .registry import Tool
 
@@ -87,6 +130,7 @@ def build_registry(cfg: Config, memory: MemoryStore) -> Registry:
     desktop_control.register(reg)             # see the screen, use the mouse and keyboard
     cameras.register(reg)                     # Hikvision DVR / security cameras
     private_vault.register(reg, t.private_folder)   # encrypted passport/IDs: always asks before unlocking
+    _register_calculator(reg)
     _register_profile_tool(reg)
     _register_privacy_tool(reg)
     _register_health_tool(reg)

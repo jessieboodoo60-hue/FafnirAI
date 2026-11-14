@@ -29,7 +29,8 @@ from fafnir.config import load_config  # noqa: E402
 def main() -> int:
     out = sys.argv[sys.argv.index("--out") + 1] if "--out" in sys.argv else None
     only = int(sys.argv[sys.argv.index("--limit") + 1]) if "--limit" in sys.argv else None
-    cases = json.loads((ROOT / "tests" / "brain_cases.json").read_text(encoding="utf-8"))[:only]
+    cases_file = sys.argv[sys.argv.index("--cases") + 1] if "--cases" in sys.argv else "tests/brain_cases.json"
+    cases = json.loads((ROOT / cases_file).read_text(encoding="utf-8"))[:only]
     cfg = load_config()
     import dataclasses
     if "--provider" in sys.argv:   # test another brain without editing config.toml
@@ -49,7 +50,12 @@ def main() -> int:
         if state["first"] is None:
             state["first"] = time.perf_counter() - state["t0"]
 
+    real_run = agent.registry.run
+
     def fake_run(name, args, confirm=None, owner_present=True):
+        if name == "calculate":          # pure arithmetic: let it run, and judge the spoken answer
+            state["calc"] = True
+            return real_run(name, args, confirm=confirm, owner_present=owner_present)
         mark()
         state["tools"].append(name)
         state["cancel"].set()   # one tool choice is all we score; stop the turn here
@@ -84,7 +90,7 @@ def main() -> int:
                 agent.warm_up()                 # connection time isn't part of the score
         except Exception:
             pass
-        state.update(tools=[], first=None, cancel=threading.Event(), t0=time.perf_counter())
+        state.update(tools=[], first=None, cancel=threading.Event(), t0=time.perf_counter(), calc=False)
         err = ""
         try:
             r = agent.run_turn(c["say"], on_text=on_text, cancel=state["cancel"], on_tool=on_tool,

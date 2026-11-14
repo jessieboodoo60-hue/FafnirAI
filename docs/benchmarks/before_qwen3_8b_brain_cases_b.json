@@ -1,0 +1,499 @@
+{
+  "summary": {
+    "brain": "ollama:qwen3:8b",
+    "date": "2026-11-13 22:51",
+    "cases": 36,
+    "passed": 32,
+    "handled_locally": 29,
+    "handed_to_cloud": 3,
+    "first_response_median_s": 1.46,
+    "first_response_p90_s": 2.27,
+    "first_response_worst_s": 5.21
+  },
+  "rows": [
+    {
+      "say": "What's 9 times 12?",
+      "expect": [],
+      "first_tool": null,
+      "ok": false,
+      "cloud": false,
+      "first_s": 2.55,
+      "total_s": 2.67,
+      "answer": "72.",
+      "error": ""
+    },
+    {
+      "say": "How many days are in a leap year?",
+      "expect": [],
+      "first_tool": null,
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.82,
+      "total_s": 2.22,
+      "answer": "A leap year has 366 days.",
+      "error": ""
+    },
+    {
+      "say": "Say good night.",
+      "expect": [],
+      "first_tool": null,
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.7,
+      "total_s": 2.0,
+      "answer": "Good night, master. Sweet dreams.",
+      "error": ""
+    },
+    {
+      "say": "What's the opposite of hot?",
+      "expect": [],
+      "first_tool": null,
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.41,
+      "total_s": 1.67,
+      "answer": "The opposite of hot is cold.",
+      "error": ""
+    },
+    {
+      "say": "Launch Spotify.",
+      "expect": [
+        "computer_launch_app",
+        "computer_open"
+      ],
+      "first_tool": "computer_launch_app",
+      "ok": true,
+      "cloud": false,
+      "first_s": 2.27,
+      "total_s": 2.27,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Shut Discord down.",
+      "expect": [
+        "computer_close_app",
+        "computer_list_running_apps"
+      ],
+      "first_tool": "computer_close_app",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.48,
+      "total_s": 1.48,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Mute the sound.",
+      "expect": [
+        "computer_media"
+      ],
+      "first_tool": "computer_media",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.35,
+      "total_s": 1.35,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Skip this track.",
+      "expect": [
+        "computer_media"
+      ],
+      "first_tool": "computer_media",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.17,
+      "total_s": 1.17,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Is my D drive nearly full?",
+      "expect": [
+        "computer_system_info",
+        "computer_run_command"
+      ],
+      "first_tool": "computer_system_info",
+      "ok": true,
+      "cloud": false,
+      "first_s": 0.95,
+      "total_s": 0.95,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Look in my Downloads folder for the invoice PDF.",
+      "expect": [
+        "computer_find_files",
+        "computer_list_folder"
+      ],
+      "first_tool": "computer_find_files",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.47,
+      "total_s": 1.47,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Create a new folder named Taxes in Documents.",
+      "expect": [
+        "computer_make_folder"
+      ],
+      "first_tool": "computer_make_folder",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.41,
+      "total_s": 1.41,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "What apps do I have installed?",
+      "expect": [
+        "computer_list_apps"
+      ],
+      "first_tool": "computer_list_apps",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.35,
+      "total_s": 1.35,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Get rid of the game Stumble Guys.",
+      "expect": [
+        "software_uninstall",
+        "software_search"
+      ],
+      "first_tool": "software_uninstall",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.55,
+      "total_s": 1.55,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Put Blender on my PC.",
+      "expect": [
+        "software_search",
+        "software_install"
+      ],
+      "first_tool": "software_search",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.35,
+      "total_s": 1.35,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Who's at the gate?",
+      "expect": [
+        "camera_snapshot",
+        "camera_status"
+      ],
+      "first_tool": "(asked to use the cloud)",
+      "ok": true,
+      "cloud": true,
+      "first_s": 1.1,
+      "total_s": 1.1,
+      "answer": "Okay, keeping it on this PC. I can't do that one without the cloud brain.",
+      "error": ""
+    },
+    {
+      "say": "Take a look at my screen and tell me what's open.",
+      "expect": [
+        "screen_look"
+      ],
+      "first_tool": "computer_list_running_apps",
+      "ok": false,
+      "cloud": false,
+      "first_s": 1.31,
+      "total_s": 1.31,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Am I free on Saturday afternoon?",
+      "expect": [
+        "calendar_list_events"
+      ],
+      "first_tool": "calendar_list_events",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.66,
+      "total_s": 1.66,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Book lunch with Maya next Tuesday at noon.",
+      "expect": [
+        "calendar_create_event",
+        "calendar_list_events"
+      ],
+      "first_tool": "calendar_create_event",
+      "ok": true,
+      "cloud": false,
+      "first_s": 2.32,
+      "total_s": 2.32,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Any new mail from my accountant?",
+      "expect": [
+        "gmail_search",
+        "contacts_search"
+      ],
+      "first_tool": "gmail_search",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.44,
+      "total_s": 1.44,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Draft a reply to Sam saying yes.",
+      "expect": [
+        "gmail_search",
+        "gmail_draft",
+        "contacts_search"
+      ],
+      "first_tool": "gmail_draft",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.58,
+      "total_s": 1.58,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Look up Kyle's email address.",
+      "expect": [
+        "contacts_search",
+        "memory_search"
+      ],
+      "first_tool": "contacts_search",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.43,
+      "total_s": 1.43,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Is there a spreadsheet called Q3 report in Drive?",
+      "expect": [
+        "drive_search"
+      ],
+      "first_tool": "drive_search",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.73,
+      "total_s": 1.73,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Remind me to renew the car insurance.",
+      "expect": [
+        "google_tasks_add",
+        "business_add_item"
+      ],
+      "first_tool": "business_add_item",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.68,
+      "total_s": 1.68,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "What do I still have to do today?",
+      "expect": [
+        "google_tasks_list",
+        "business_list_items",
+        "calendar_list_events"
+      ],
+      "first_tool": "business_list_items",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.46,
+      "total_s": 1.46,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "How many subscribers do I have?",
+      "expect": [
+        "youtube_channel"
+      ],
+      "first_tool": "youtube_channel",
+      "ok": true,
+      "cloud": false,
+      "first_s": 0.97,
+      "total_s": 0.97,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Will it rain tomorrow?",
+      "expect": [
+        "weather"
+      ],
+      "first_tool": "weather",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.51,
+      "total_s": 1.51,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "What's the latest news about Nvidia?",
+      "expect": [
+        "WebSearch",
+        "WebFetch",
+        "web_search"
+      ],
+      "first_tool": "(asked to use the cloud)",
+      "ok": true,
+      "cloud": true,
+      "first_s": 1.24,
+      "total_s": 1.24,
+      "answer": "Okay, keeping it on this PC. I can't do that one without the cloud brain.",
+      "error": ""
+    },
+    {
+      "say": "How much is a PS5 right now?",
+      "expect": [
+        "WebSearch",
+        "WebFetch",
+        "web_search"
+      ],
+      "first_tool": "(asked to use the cloud)",
+      "ok": true,
+      "cloud": true,
+      "first_s": 1.19,
+      "total_s": 1.19,
+      "answer": "Okay, keeping it on this PC. I can't do that one without the cloud brain.",
+      "error": ""
+    },
+    {
+      "say": "Note that my sister's birthday is March 3rd.",
+      "expect": [
+        "memory_remember",
+        "memory_update"
+      ],
+      "first_tool": "business_add_item",
+      "ok": false,
+      "cloud": false,
+      "first_s": 1.69,
+      "total_s": 1.69,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Actually I moved; I live in Arima now.",
+      "expect": [
+        "memory_remember",
+        "memory_update",
+        "memory_search"
+      ],
+      "first_tool": "memory_update",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.41,
+      "total_s": 1.41,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Did I mention the plumber last week?",
+      "expect": [
+        "conversation_search",
+        "memory_search"
+      ],
+      "first_tool": null,
+      "ok": false,
+      "cloud": false,
+      "first_s": 0.9,
+      "total_s": 1.1,
+      "answer": "No, you didn't mention the plumber last week.",
+      "error": ""
+    },
+    {
+      "say": "Don't bother me for the next two hours.",
+      "expect": [
+        "heartbeat_pause"
+      ],
+      "first_tool": "heartbeat_pause",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.12,
+      "total_s": 1.12,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Switch to gaming mode.",
+      "expect": [
+        "performance_profile"
+      ],
+      "first_tool": "performance_profile",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.47,
+      "total_s": 1.47,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Run a check on yourself. Is everything working?",
+      "expect": [
+        "health_status"
+      ],
+      "first_tool": "health_status",
+      "ok": true,
+      "cloud": false,
+      "first_s": 0.99,
+      "total_s": 0.99,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "What have you sent out of this PC today?",
+      "expect": [
+        "privacy_report"
+      ],
+      "first_tool": "privacy_report",
+      "ok": true,
+      "cloud": false,
+      "first_s": 1.59,
+      "total_s": 1.59,
+      "answer": "",
+      "error": ""
+    },
+    {
+      "say": "Put the file tax.pdf on my desktop into my vault.",
+      "expect": [
+        "private_files_add",
+        "computer_find_files"
+      ],
+      "first_tool": "private_files_add",
+      "ok": true,
+      "cloud": false,
+      "first_s": 5.21,
+      "total_s": 5.21,
+      "answer": "",
+      "error": ""
+    }
+  ]
+}

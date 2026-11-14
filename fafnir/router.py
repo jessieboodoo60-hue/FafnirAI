@@ -42,6 +42,7 @@ HINTS = {
     "private_files_list": "what is in my vault, list my private documents",
     "private_files_unlock": "passport, national ID card, driver's permit, birth certificate, personal information, "
                             "my ID number, identity documents",
+    "calculate": "what is 17 times 23, multiply, divide, add up, percentage of, how much is 15 percent, sum, total, maths, arithmetic",
     "health_status": "how are you doing, run diagnostics, is everything working, system check, why are you slow, status report",
     "privacy_report": "what have you sent out, did anything leave my PC, what data did you share, outbound requests",
     "software_install": "install a program, app or game",

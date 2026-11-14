@@ -99,6 +99,7 @@ class LocalConfig:
     cloud_fallback: str = "ask"    # "ask" (owner says yes each time) | "never" | "always"
     keep_alive: str = "30m"        # how long the model stays loaded after the last request
     fast: str = "qwen3:4b-instruct"  # the smaller model used by the Balanced profile
+    self_check: bool = True          # double-check answers given without a tool (catches made-up actions and facts)
 
 
 @dataclass(frozen=True)
