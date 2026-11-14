@@ -30,8 +30,8 @@ class Fakes:
 
     def local(self, prompt, model, schema=None, max_tokens=900):
         self.local_calls.append(prompt[:60])
-        if schema and "verdict" in json.dumps(schema):
-            return json.dumps({"verdict": "pass", "missing": [], "unsupported_claims": []})
+        if "VERDICT:" in prompt:
+            return "VERDICT: pass\nMISSING: none\nUNSUPPORTED: none"
         if schema and "tasks" in json.dumps(schema):
             return json.dumps({"tasks": [{"role": "research", "instruction": "Find website agencies in Trinidad"},
                                          {"role": "marketing", "instruction": "Draft a positioning statement"},
@@ -171,3 +171,20 @@ def test_starnet_timeout_falls_back_to_a_labelled_local_answer(env):
     run_all(o)
     out = o.job(j["id"])["result"]["output"]
     assert o.job(j["id"])["status"] == "done" and out.startswith("[Answered by Fafnir's local model WITHOUT web search")
+
+
+def test_qa_lines_are_parsed_and_garbage_is_not_a_pass():
+    q = W.parse_qa("VERDICT: needs work\nMISSING: fees for 2026 ; the online form\nUNSUPPORTED: roc.gov.tt is the registry")
+    assert q == {"verdict": "needs work", "missing": ["fees for 2026", "the online form"],
+                 "unsupported_claims": ["roc.gov.tt is the registry"]}
+    assert W.parse_qa("**VERDICT:** pass\n**MISSING:** none\n**UNSUPPORTED:** none")["verdict"] == "pass"
+    assert W.parse_qa("   \n\n  ")["verdict"] == "not checked"
+
+
+def test_briefs_carry_the_date_and_the_business(env):
+    o, wf, f, *_ = env
+    wf.assign("research", "anything")
+    run_all(o)
+    brief = f.starnet_calls[0][1]
+    from datetime import date
+    assert f"{date.today():%Y}" in brief and "Trinidad and Tobago" in brief and "no customers or revenue yet" in brief

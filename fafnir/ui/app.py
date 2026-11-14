@@ -1155,7 +1155,9 @@ def run_app(argv: list[str]) -> int:
 
         wf = Workforce(ops, local_model=cfg.local.fast, notify=wf_notice, gaming=gaming,
                        integration_on=integrations.enabled,
-                       mapping=dict(config_edit.read_all().get("workforce", {}).get("crew", {})))
+                       mapping=dict(config_edit.read_all().get("workforce", {}).get("crew", {})),
+                       **({"business": config_edit.read_all()["workforce"]["business"]}
+                          if config_edit.read_all().get("workforce", {}).get("business") else {}))
         RESOURCES["workforce"] = wf
         ops.start(workers=2)
         RESOURCES["ops"] = ops

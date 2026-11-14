@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -32,6 +33,9 @@ STARNET_HOME = Path(os.environ.get("LOCALAPPDATA", "")) / "StarNet"
 OLLAMA = "http://127.0.0.1:11434"
 TASK_SECONDS = 600
 MAX_GOAL_TASKS = 6
+BUSINESS = ("Fafnir Enterprise is a small technology and AI services business in Trinidad and Tobago, owned and run by "
+            "one person. It offers websites, business automation, AI assistants and creative/advertising work. It has "
+            "no customers or revenue yet")
 FREE_PROVIDERS = {"ollama", "local", "lmstudio", "claude_code", "subscription", ""}
 
 
@@ -144,9 +148,10 @@ def run_local(prompt: str, model: str, schema: dict | None = None, max_tokens: i
 
 # ---- the workforce ------------------------------------------------------------------------------
 class Workforce:
-    def __init__(self, ops: Ops, local_model: str = "qwen3:4b-instruct", notify=None, gaming=None,
+    def __init__(self, ops: Ops, local_model: str = "qwen3:4b-instruct", notify=None, gaming=None, business: str = BUSINESS,
                  starnet=run_starnet, local=run_local, integration_on=None, mapping: dict | None = None):
         self.ops, self.model = ops, local_model
+        self.business = business
         self.notify = notify or (lambda title, detail, urgency: None)
         self.gaming = gaming or (lambda: False)            # True while a game needs the graphics card
         self._starnet, self._local = starnet, local
@@ -218,26 +223,29 @@ class Workforce:
             return out
         return handle
 
-    @staticmethod
-    def _brief(r: Role, instruction: str) -> str:
-        return (f"You are the {r.name} desk of Fafnir Enterprise ({r.does.lower()}). Task:\n{instruction}\n\n"
+    def _brief(self, r: Role, instruction: str) -> str:
+        from datetime import date
+        return (f"You are the {r.name} desk of Fafnir Enterprise ({r.does.lower()}). About the business: {self.business}. "
+                f"Today is {date.today():%A %d %B %Y}.\n\nTask:\n{instruction}\n\n"
                 "Work only on this task. Say clearly what is a fact (with its source), what is an estimate, and what "
                 "is an assumption. Don't contact anyone, publish, buy or sign anything; prepare it for the owner instead. "
                 "Keep it concise and practical.")
 
     def _qa(self, instruction: str, output: str) -> dict:
-        schema = {"type": "object", "properties": {"verdict": {"type": "string", "enum": ["pass", "needs work"]},
-                                                   "missing": {"type": "array", "items": {"type": "string"}},
-                                                   "unsupported_claims": {"type": "array", "items": {"type": "string"}}},
-                  "required": ["verdict", "missing", "unsupported_claims"]}
-        prompt = ("You are quality assurance. Check the work below against the task. List requirements of the task it "
-                  "misses, and claims stated as fact without a source or that look invented. Be strict but fair.\n\n"
-                  f"TASK:\n{instruction[:1500]}\n\nWORK:\n{output[:5000]}")
+        """Second look at a role's work. Plain labelled lines rather than forced JSON: on the 4B model,
+        forced JSON sometimes produced nothing but blank space until the length limit (2026-11-14)."""
+        prompt = ("You are quality assurance for a small business. Check the WORK against the TASK. Answer in exactly "
+                  "three lines and nothing else:\n"
+                  "VERDICT: pass or needs work\n"
+                  "MISSING: what the task asked for that the work doesn't cover, separated by ' ; ', or none\n"
+                  "UNSUPPORTED: claims stated as fact that have no source, look invented, or name a source that may not "
+                  "exist, separated by ' ; ', or none\n\n"
+                  f"TASK:\n{instruction[:1200]}\n\nWORK:\n{output[:2600]}")
         try:
             if self.gaming():
                 return {"verdict": "not checked", "missing": [], "unsupported_claims": [], "note": "skipped while gaming"}
-            return json.loads(self._local(prompt, self.model, schema=schema, max_tokens=400))
-        except (ValueError, Defer, httpx.HTTPError) as e:
+            return parse_qa(self._local(prompt, self.model, max_tokens=300))
+        except (Defer, httpx.HTTPError) as e:
             return {"verdict": "not checked", "missing": [], "unsupported_claims": [], "note": str(e)[:100]}
 
     # ---- goals (the orchestrator) ----
@@ -335,3 +343,22 @@ class Workforce:
                         "recent": [{"id": j["id"], "status": j["status"], "updated": j["updated"]}
                                    for j in self.ops.jobs() if j["kind"] == f"task:{r.id}"][:5]})
         return out
+
+
+def parse_qa(text: str) -> dict:
+    """Read the three QA lines; anything unreadable is reported as not checked rather than as a pass."""
+    def field(name: str) -> str:
+        m = re.search(rf"^\s*\**{name}\**\s*:\s*(.+)$", text, re.I | re.M)
+        return m.group(1).strip() if m else ""
+
+    def items(value: str) -> list[str]:
+        return [] if not value or value.lower().strip(" .") in ("none", "n/a", "nothing") else \
+            [x.strip(" -.") for x in re.split(r"\s*;\s*", value) if x.strip(" -.")][:8]
+    verdict = field("VERDICT").lower()
+    if "pass" in verdict:
+        v = "pass"
+    elif "need" in verdict or "work" in verdict or "fail" in verdict:
+        v = "needs work"
+    else:
+        return {"verdict": "not checked", "missing": [], "unsupported_claims": [], "note": "QA reply unreadable"}
+    return {"verdict": v, "missing": items(field("MISSING")), "unsupported_claims": items(field("UNSUPPORTED"))}

@@ -62,6 +62,20 @@ The same run found a real bug: a second program opening the job database (a comm
 re-queued jobs the running Fafnir was still working on, which could have made a task run twice. Running
 jobs are now tagged with the program running them and only recovered once that program has gone.
 
+## Quality of the first real results (2026-11-14)
+
+Five of the goal's six tasks and the research task finished. The 4B model's work is usable as a first
+draft but needs checking: the research fallback named a registry website that doesn't exist under a "facts
+with sources" heading, the finance plan was dated 2024, and lead scoring invented products. Since then every
+brief carries today's date and what Fafnir Enterprise actually is (`business` under `[workforce]` in
+`config.toml` overrides it), and QA asks for three plain labelled lines instead of forced JSON (forced JSON
+made the 4B return nothing). Re-run on the real outputs, QA marked both "needs work", flagging the
+unsourced fees and the finance plan's invented "signed proposal". QA can still miss a plausible-looking fake
+source; it is a second look, not proof.
+
+Speed: StarNet loads the same model with a 32,000-token context and Fafnir uses 4,096, so Ollama reloads it
+when both take turns; one QA check took 221 s while the other took 26 s.
+
 ## Tested
 
 `tests/test_workforce.py`, 9 tests with stand-ins for StarNet and the local model: the roster,
