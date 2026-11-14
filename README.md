@@ -157,7 +157,7 @@ Ask Fafnir to install or uninstall an app or game ("install Pokemon Reborn", "in
 
 ## Screen, mouse and keyboard
 
-Fafnir can see your monitors (main, right, above) and use the mouse and keyboard to do things that only work on screen: games, app menus, dialogs, websites and settings pages. It looks, acts, then checks the result. Move the mouse yourself at any time to take over; Fafnir stops. Risky on-screen actions you didn't directly ask for (deleting, sending, buying, uninstalling, changing settings) ask for your OK first, and it won't type passwords or card numbers unless you give them to it for that purpose.
+Fafnir can see your monitors (main, right, above) and use the mouse and keyboard to do things that only work on screen: games, app menus, dialogs, websites and settings pages. It looks, acts, then checks the result. You can keep using your mouse while it works: if you move it during one of Fafnir's movements, Fafnir pauses until you stop and then carries on. **Press Esc to stop it** (or use the kill switch). Risky on-screen actions you didn't directly ask for (deleting, sending, buying, uninstalling, changing settings) ask for your OK first, and it won't type passwords or card numbers unless you give them to it for that purpose.
 
 ## Camera security system (Hikvision DVR)
 

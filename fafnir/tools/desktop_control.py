@@ -7,8 +7,13 @@
 - confirm_with_owner: asks the owner before a risky on-screen action (delete, send, buy,
   uninstall, change a setting) that they didn't directly ask for, via the normal gate.
 
-Take-over: if the owner moves the mouse while Fafnir is driving, the next action stops with
-an error instead of fighting them for the cursor.
+Sharing the mouse (changed 2026-11-14 at the owner's request): moving the mouse no longer stops
+Fafnir. Between actions it simply carries on from wherever the pointer is; if the owner moves the
+mouse during one of Fafnir's glides, Fafnir pauses until they stop and then continues (a drag in
+progress is let go instead, so nothing gets dragged by accident). It only gives up if the owner keeps
+using the mouse for YIELD_MAX seconds. To STOP Fafnir: press Esc (anywhere) or use the kill switch.
+The old rule (any movement over 40 px within 90 s = take-over) fired 22 times by 2026-11-14 when the
+owner had only moved the mouse while Fafnir was thinking.
 
 Human-like motion (2026-11-13, owner's request): the pointer never jumps. It travels a gently
 curved path (cubic Bezier with a random bend), speeding up and slowing down (smootherstep
@@ -34,8 +39,10 @@ from .registry import Registry, Tool, ToolError
 
 MAX_WIDTH = 1280            # screenshots are scaled to this width for the model
 SETTLE = 0.6                # seconds to wait before the after-action screenshot
-TAKEOVER_PX = 40            # mouse moved this far from where Fafnir left it = owner took over
-TAKEOVER_WINDOW = 90        # only within this many seconds of Fafnir's last action
+TAKEOVER_PX = 40            # during a glide: pointer this far from where Fafnir put it = the owner is moving it
+YIELD_STILL = 0.8           # seconds the owner's mouse must rest before Fafnir carries on
+YIELD_MAX = 10              # if the owner keeps using the mouse this long, Fafnir gives up on that action
+ESC_STOP_SECONDS = 15       # after Esc, mouse/keyboard actions are refused for this long
 
 MOVE_MIN, MOVE_MAX = 0.2, 0.9   # seconds for a pointer move, short to long
 MOVE_HZ = 120                   # pointer updates per second while gliding
@@ -53,12 +60,18 @@ KEYS = {
 }
 
 
+class _OwnerMoving(Exception):
+    pass
+
+
 class Desktop:
     def __init__(self):
         self.mouse, self.keyboard = MouseController(), KeyController()
         self.views: dict[str, tuple[dict, float]] = {}   # monitor name -> (monitor rect, image scale)
         self.last_pos = None
         self.last_time = 0.0
+        self.stop_until = 0.0          # set by Esc
+        self._own_keys = False         # True while Fafnir itself is pressing keys
         self.lock = threading.Lock()
 
     # ---- monitors --------------------------------------------------------------------
@@ -115,24 +128,60 @@ class Desktop:
         return round(sx), round(sy)
 
     def _check_takeover(self) -> None:
-        from .. import killswitch
-        if killswitch.engaged():
-            raise ToolError("Kill switch is on: mouse and keyboard control stopped.")
-        if self.last_pos is None or time.monotonic() - self.last_time > TAKEOVER_WINDOW:
-            return
-        cx, cy = self.mouse.position
-        if math.dist((cx, cy), self.last_pos) > TAKEOVER_PX:
-            self.last_pos = None
-            raise ToolError("The owner moved the mouse, so I stopped controlling it. "
-                            "Don't continue with the mouse or keyboard until they ask again.")
+        """Before an action. The owner having moved the mouse since the last action is fine."""
+        self._stop_check()
 
     def _stop_check(self) -> None:
         from .. import killswitch
         if killswitch.engaged():
             raise ToolError("Kill switch is on: mouse and keyboard control stopped.")
+        if time.monotonic() < self.stop_until:
+            raise ToolError("The owner pressed Esc to stop me using the mouse and keyboard. "
+                            "Don't continue with the mouse or keyboard until they ask again.")
+
+    def start_esc_listener(self) -> None:
+        """Esc anywhere stops Fafnir's mouse and keyboard work (not when Fafnir itself presses Esc)."""
+        from pynput import keyboard
+
+        def on_press(key):
+            if key == Key.esc and not self._own_keys:
+                self.stop_until = time.monotonic() + ESC_STOP_SECONDS
+        try:
+            self._esc = keyboard.Listener(on_press=on_press, daemon=True)
+            self._esc.start()
+        except Exception as e:
+            print(f"[desktop] Esc listener unavailable: {e}", flush=True)
+
+    def _wait_for_owner(self) -> None:
+        """The owner is moving the mouse: wait until it has rested for YIELD_STILL seconds."""
+        give_up = time.monotonic() + YIELD_MAX
+        last, still_since = self.mouse.position, time.monotonic()
+        while time.monotonic() < give_up:
+            time.sleep(0.05)
+            self._stop_check()
+            now = self.mouse.position
+            if math.dist(now, last) > 2:
+                last, still_since = now, time.monotonic()
+            elif time.monotonic() - still_since >= YIELD_STILL:
+                return
+        raise ToolError("The owner was using the mouse, so I didn't finish that action. "
+                        "Try again in a moment, or ask the owner.")
 
     def _glide(self, target: tuple[int, int], dragging: bool = False) -> None:
-        """Move the pointer to `target` along a curved, eased, human-paced path."""
+        """Move the pointer to `target`; if the owner moves the mouse on the way, wait for them, then
+        continue from where the pointer is (up to three times)."""
+        for _ in range(3):
+            try:
+                return self._glide_once(target, dragging)
+            except _OwnerMoving:
+                if dragging:
+                    self.mouse.release(Button.left)
+                    raise ToolError("The owner moved the mouse during a drag, so I let go. Try the drag again "
+                                    "when they're done.")
+                self._wait_for_owner()
+        raise ToolError("The owner kept moving the mouse, so I didn't finish that action. Try again in a moment.")
+
+    def _glide_once(self, target: tuple[int, int], dragging: bool = False) -> None:
         sx, sy = self.mouse.position
         tx, ty = target
         dist = math.dist((sx, sy), (tx, ty))
@@ -163,10 +212,8 @@ class Desktop:
             for i in range(1, steps + 1):
                 self._stop_check()
                 cx, cy = self.mouse.position
-                if math.dist((cx, cy), placed) > TAKEOVER_PX:   # the owner grabbed the mouse
-                    self.last_pos = None
-                    raise ToolError("The owner moved the mouse, so I stopped controlling it. "
-                                    "Don't continue with the mouse or keyboard until they ask again.")
+                if math.dist((cx, cy), placed) > TAKEOVER_PX:   # the owner is moving the mouse too
+                    raise _OwnerMoving()
                 u = i / steps
                 e = u * u * u * (u * (6 * u - 15) + 10)          # smootherstep: slow, fast, slow
                 m = 1 - e
@@ -258,7 +305,11 @@ class Desktop:
             cps = TYPE_CPS_LONG if len(text) > 300 else TYPE_CPS
             for ch in text:  # key by key, with a human rhythm
                 self._stop_check()
-                self.keyboard.type(ch)
+                self._own_keys = True
+                try:
+                    self.keyboard.type(ch)
+                finally:
+                    self._own_keys = False
                 gap = random.uniform(0.6, 1.5) / cps
                 if ch in (" ", "\n"):
                     gap += random.uniform(0.02, 0.08)
@@ -281,13 +332,18 @@ class Desktop:
             self._check_takeover()
             for _ in range(max(1, min(times or 1, 20))):
                 self._stop_check()
-                for k in combo:
-                    self.keyboard.press(k)
-                    time.sleep(random.uniform(0.03, 0.06))
-                time.sleep(random.uniform(0.04, 0.08))
-                for k in reversed(combo):
-                    self.keyboard.release(k)
-                    time.sleep(random.uniform(0.02, 0.04))
+                self._own_keys = True      # so Fafnir's own Esc isn't taken as the owner's "stop"
+                try:
+                    for k in combo:
+                        self.keyboard.press(k)
+                        time.sleep(random.uniform(0.03, 0.06))
+                    time.sleep(random.uniform(0.04, 0.08))
+                    for k in reversed(combo):
+                        self.keyboard.release(k)
+                        time.sleep(random.uniform(0.02, 0.04))
+                finally:
+                    time.sleep(0.03)       # let the key-up reach the listener first
+                    self._own_keys = False
                 time.sleep(random.uniform(0.08, 0.15))
             self._done()
         return self._after(monitor, look_after, f"pressed {keys}" + (f" x{times}" if times and times > 1 else ""))
@@ -310,6 +366,7 @@ def _let_go(d: "Desktop") -> None:
 
 def register(reg: Registry) -> None:
     d = Desktop()
+    d.start_esc_listener()
     from .. import killswitch
     killswitch.on_change(lambda on: _let_go(d) if on else None)
     mon = {"type": "string", "description": "Which monitor: main, right, above (or left/below/1/2/3). Default main."}
