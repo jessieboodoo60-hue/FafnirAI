@@ -1120,6 +1120,12 @@ def run_app(argv: list[str]) -> int:
                 links.append(link)
         except Exception as e:
             on_status(f"Phone link failed to start: {e}")
+    health = getattr(engine, "health", None)
+    if health is not None:
+        health.extras["heartbeat"] = heartbeat
+        for link in links:
+            if hasattr(link, "client"):
+                health.extras["discord"] = link
 
     def restart() -> None:
         """Settings that need a restart: stop everything, then launch a fresh copy."""

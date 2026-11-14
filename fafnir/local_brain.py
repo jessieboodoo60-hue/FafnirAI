@@ -109,6 +109,7 @@ class LocalAgent:
         self._router: ToolRouter | None = None
         self._lock = threading.Lock()
         self.last_stats: dict = {}
+        self.last_tps = 0.0
 
     # ---- lifecycle --------------------------------------------------------------------
     def warm_up(self) -> None:
@@ -218,7 +219,15 @@ class LocalAgent:
             if cancel is not None and cancel.is_set():
                 stopped = True
                 break
-            text, calls = self._chat(messages, tools, think, emit, cancel)
+            try:
+                text, calls = self._chat(messages, tools, think, emit, cancel)
+            except LLMError as e:
+                if step == 0 and not said and self._make_cloud is not None and self.cloud_policy != "never":
+                    # the local model server is down: offer the cloud rather than a dead end
+                    print(f"[brain] local model unavailable ({e}); offering the cloud brain", flush=True)
+                    return self._escalate(user_text, "the local brain isn't responding", said, on_text, cancel,
+                                          on_tool, confirm, owner_present)
+                raise
             if cancel is not None and cancel.is_set():
                 stopped = True
                 break
@@ -283,6 +292,8 @@ class LocalAgent:
                     if d.get("done"):
                         self.llm.usage.input += int(d.get("prompt_eval_count", 0) or 0)
                         self.llm.usage.output += int(d.get("eval_count", 0) or 0)
+                        if (d.get("eval_count") or 0) >= 12 and d.get("eval_duration"):
+                            self.last_tps = d["eval_count"] / (d["eval_duration"] / 1e9)   # for the health monitor
         except httpx.HTTPError as e:
             raise LLMError(_friendly(e))
         return text, calls
@@ -303,6 +314,7 @@ class LocalAgent:
             return local_only(f"I can't do that right now: it needs {reason}, and the cloud brain is switched off.")
         if policy == "ask":
             why = ("I'm in gaming mode, so the local brain is unloaded." if reason == "gaming mode"
+                   else "The local brain isn't responding right now." if reason == "the local brain isn't responding"
                    else f"This needs the cloud brain, for {reason}.")
             ok = bool(confirm and owner_present and confirm(f"{why} Send this request to Claude?"))
             if not ok:

@@ -165,6 +165,14 @@ class Engine:
         self._start_resources()
         threading.Thread(target=self._summarize_loop, daemon=True, name="summaries").start()
         threading.Thread(target=self._retention, daemon=True, name="retention").start()
+        try:
+            from .health import HealthMonitor
+            from .tools import RESOURCES
+            self.health = HealthMonitor(self, notify=lambda text: self.events.notice(text))
+            RESOURCES["health"] = self.health
+            self.health.start()
+        except Exception as e:
+            print(f"[health] not started: {type(e).__name__}: {e}", flush=True)
         threading.Thread(target=self._warm_up, daemon=True, name="warm-up").start()
         if self.voice and (self.cfg.voice.mic_preference or self.cfg.voice.mic_for_speaker):
             threading.Thread(target=self._watch_mics, daemon=True, name="mic-watch").start()

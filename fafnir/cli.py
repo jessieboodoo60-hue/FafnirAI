@@ -106,6 +106,9 @@ def main(argv: list[str] | None = None) -> int:
             print(str(e))
             return 1
         return 0
+    if "--health" in argv:
+        from .health import main as health_main
+        return health_main()
     if "--security-check" in argv:
         from .security_check import main as check_main
         return check_main()

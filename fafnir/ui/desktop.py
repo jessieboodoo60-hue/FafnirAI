@@ -135,9 +135,17 @@ class DesktopBridge(QObject):
             from .. import audit
             self.emit("result", id=req, ok=True, data={"values": config_edit.current(), "when": when,
                                                       "restartNeeded": self.w.restart_needed,
-                                                      "outbound": audit.outbound_summary(24)})
+                                                      "outbound": audit.outbound_summary(24),
+                                                      "health": self._health_rows()})
         except Exception as e:
             self.emit("result", id=req, ok=False, error=f"Couldn't read config.toml: {e}")
+
+    def _health_rows(self) -> list:
+        try:
+            m = getattr(self.w.engine, "health", None)
+            return m.summary()["everything"] if m else []
+        except Exception:
+            return []
 
     @Slot(str, str, str)
     def saveSetting(self, name: str, value_json: str, req: str) -> None:

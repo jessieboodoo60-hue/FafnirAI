@@ -82,7 +82,7 @@ class WakeWord:
     # ---- lifecycle -------------------------------------------------------------
     def start(self) -> None:
         self._running = True
-        self._last_sound = time.monotonic()
+        self._last_sound = self._last_frame = time.monotonic()
         threading.Thread(target=self._process, daemon=True, name="wake-word").start()
         self._stream = sd.RawInputStream(samplerate=RATE, channels=1, dtype="int16",
                                          blocksize=FRAME, callback=self._callback)
@@ -117,6 +117,7 @@ class WakeWord:
         return time.monotonic() - getattr(self, "_last_sound", time.monotonic())
 
     def _callback(self, indata, frames, time_info, status) -> None:
+        self._last_frame = time.monotonic()      # the health monitor watches this
         if np.abs(np.frombuffer(indata, dtype=np.int16)).max(initial=0) > SILENT_PEAK:
             self._last_sound = time.monotonic()
         data = self._buf + bytes(indata)

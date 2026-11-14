@@ -160,7 +160,13 @@ class DiscordBridge:
                 self.on_status(f"Discord paired with {message.author}.")
             return
         if message.author.id != self.owner_id:
-            return  # a stranger: ignore completely
+            try:   # a stranger: ignore completely, but keep a record (no content)
+                from . import audit
+                audit.record({"time": datetime.now().isoformat(timespec="seconds"), "tool": "AUTH_REJECTED",
+                              "result": "Discord DM from an account that isn't the paired owner"})
+            except Exception:
+                pass
+            return
         if voice is not None:  # a voice note: transcribe it, and answer with a voice note
             await self._voice_turn(message, voice)
             return

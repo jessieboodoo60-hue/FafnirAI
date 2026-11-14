@@ -38,6 +38,26 @@ def _register_profile_tool(reg: Registry) -> None:
         properties={"mode": {"type": "string", "enum": ["auto", "gaming", "balanced", "ai_performance"]}}))
 
 
+def _register_health_tool(reg: Registry) -> None:
+    from .registry import Tool
+
+    def health() -> dict:
+        m = RESOURCES.get("health")
+        if m is None:
+            from .. import health as h
+            rows = h.static_report()
+            return {"overall": "checked without the live app", "everything": [{"what": r["check"], "status": r["status"], "detail": r["detail"]} for r in rows]}
+        m.check()
+        return m.summary()
+
+    reg.register(Tool(
+        name="health_status", handler=health, properties={},
+        description="Fafnir's self-diagnostics: processor, memory, disks, graphics card, the local model and its "
+                    "speed, microphone and voice, phone links, backups, the kill switch and security signals, plus "
+                    "anything it recently repaired by itself. Use for 'how are you doing', 'run diagnostics', "
+                    "'is everything working', 'why are you slow'."))
+
+
 def _register_privacy_tool(reg: Registry) -> None:
     from .registry import Tool
 
@@ -69,6 +89,7 @@ def build_registry(cfg: Config, memory: MemoryStore) -> Registry:
     private_vault.register(reg, t.private_folder)   # encrypted passport/IDs: always asks before unlocking
     _register_profile_tool(reg)
     _register_privacy_tool(reg)
+    _register_health_tool(reg)
     business.register(reg, ROOT / "data")
     computer.register(reg)
     apps.register(reg)

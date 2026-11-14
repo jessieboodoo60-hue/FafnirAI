@@ -237,6 +237,8 @@ const RENDER = {
         ${row("Wallpaper", `<div class="swatches">${sw.map(([k, g, n]) => `<button class="swatch ${wp === k ? "on" : ""}" data-wp="${k}" style="background:${g}" title="${n}"></button>`).join("")}</div>`)}
         ${row("Your own picture", `<input class="field set-text" data-k="app.background" placeholder="C:/Users/you/Pictures/wall.jpg" value="${esc(v["app.background"] || "")}" style="max-width:320px">`)}
         ${row("Monitor", seg("app.screen", [["right", "Right"], ["left", "Left"], ["above", "Above"], ["primary", "Main"]]), "app.screen")}</div>
+      <div class="sec">Health${(C.health || []).some((h) => h.status !== "ok") ? " · needs attention" : " · all good"}</div><div class="set-group">
+        ${(C.health || []).map((h) => row(`${h.status === "ok" ? "" : h.status === "fail" ? "⛔ " : "⚠️ "}${esc(h.what)}`, `<span class="k">${esc(h.detail)}</span>`)).join("") || row("Health monitor", `<span class="k">Starting…</span>`)}</div>
       <div class="sec">Privacy · sent off this PC in the last 24 hours</div><div class="set-group">
         ${Object.keys(C.outbound || {}).length ? Object.entries(C.outbound).map(([to, d]) => row(`${esc(to)}<div class="set-note">${esc((d.why || []).join(", "))}</div>`, `<span class="k">${d.requests} request${d.requests === 1 ? "" : "s"}${d.kb ? " · " + d.kb + " KB" : ""}</span>`)).join("") : row("Nothing left this PC", `<span class="k">All local</span>`)}</div>
       <div class="sec">Notifications</div><div class="set-group">${row("Pause notices (do not disturb)", `<button class="switch ${S.paused ? "on" : ""}" id="set-dnd"></button>`)}</div>
