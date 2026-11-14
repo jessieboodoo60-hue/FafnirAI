@@ -237,6 +237,9 @@ const RENDER = {
         ${row("Wallpaper", `<div class="swatches">${sw.map(([k, g, n]) => `<button class="swatch ${wp === k ? "on" : ""}" data-wp="${k}" style="background:${g}" title="${n}"></button>`).join("")}</div>`)}
         ${row("Your own picture", `<input class="field set-text" data-k="app.background" placeholder="C:/Users/you/Pictures/wall.jpg" value="${esc(v["app.background"] || "")}" style="max-width:320px">`)}
         ${row("Monitor", seg("app.screen", [["right", "Right"], ["left", "Left"], ["above", "Above"], ["primary", "Main"]]), "app.screen")}</div>
+      <div class="sec">Integrations · off until you turn them on</div><div class="set-group">
+        ${(C.integrations || []).map((it) => row(`${esc(it.name)}<div class="set-note">${esc(it.purpose)}${it.ready ? "" : " · " + esc(it.detail) + ". " + esc(it.how)}</div>`,
+          `<button class="switch ${it.switch ? "on" : ""} ${it.ready ? "" : "off-ready"}" data-int="${esc(it.id)}" title="${it.ready ? "" : "Add its key first"}"></button>`)).join("")}</div>
       <div class="sec">Health${(C.health || []).some((h) => h.status !== "ok") ? " · needs attention" : " · all good"}</div><div class="set-group">
         ${(C.health || []).map((h) => row(`${h.status === "ok" ? "" : h.status === "fail" ? "⛔ " : "⚠️ "}${esc(h.what)}`, `<span class="k">${esc(h.detail)}</span>`)).join("") || row("Health monitor", `<span class="k">Starting…</span>`)}</div>
       <div class="sec">Privacy · sent off this PC in the last 24 hours</div><div class="set-group">
@@ -252,6 +255,12 @@ const RENDER = {
     };
     w.body.querySelectorAll(".seg button").forEach((b) => (b.onclick = () => save(b.parentElement.dataset.k, JSON.parse(b.dataset.v))));
     w.body.querySelectorAll(".switch[data-k]").forEach((b) => (b.onclick = () => save(b.dataset.k, !v[b.dataset.k])));
+    w.body.querySelectorAll(".switch[data-int]").forEach((b) => (b.onclick = async () => {
+      const it = (C.integrations || []).find((x) => x.id === b.dataset.int);
+      const r = await request("saveSetting", "integrations." + b.dataset.int, JSON.stringify(!it.switch));
+      if (!r.ok) { banner({ title: `${it.name} isn't ready yet`, detail: r.error, urgency: "important", app: "settings" }); return; }
+      it.switch = r.data.value; it.active = it.switch && it.ready; RENDER.settings(w);
+    }));
     w.body.querySelectorAll(".set-slider").forEach((s) => {
       const lbl = s.dataset.k.endsWith("seconds") ? "#fu-val" : "#sens-val";
       s.oninput = () => (w.body.querySelector(lbl).textContent = s.dataset.k.endsWith("seconds") ? s.value + "s" : s.value);

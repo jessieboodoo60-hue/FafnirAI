@@ -28,6 +28,8 @@ EDITABLE: dict[tuple[str, str], tuple[str, object, str]] = {
     ("voice.wake", "sensitivity"): ("number", (0.05, 0.95), "restart"),
     ("voice.wake", "follow_up_seconds"): ("number", (0, 60), "now"),
     ("voice.wake", "while_speaking"): ("bool", None, "now"),
+    **{("integrations", p): ("bool", None, "now")
+       for p in ("higgsfield", "gemini", "openai", "anthropic_api", "stripe", "firebase", "tailscale")},
     ("app", "screen"): ("choice", ["right", "left", "above", "primary"], "restart"),
     ("app", "background"): ("text", None, "now"),
 }
@@ -56,6 +58,9 @@ def check(section: str, key: str, value):
     if spec is None:
         raise ValueError(f"{section}.{key} can't be changed from the app.")
     kind, allowed, _ = spec
+    if section == "integrations":
+        from . import integrations
+        integrations.check_can_enable(key, bool(value))
     if kind == "choice":
         if value not in allowed:
             raise ValueError(f"{key} must be one of: {', '.join(allowed)}.")

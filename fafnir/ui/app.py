@@ -1029,6 +1029,14 @@ def _redirect_output_if_windowless() -> None:
         sys.stderr = sys.stderr or f
 
 
+def _app_config_api() -> dict:
+    from .. import config_edit
+    try:
+        return dict(config_edit.read_all().get("api", {}))
+    except Exception:
+        return {}
+
+
 def run_app(argv: list[str]) -> int:
     _redirect_output_if_windowless()
     app = QApplication(sys.argv[:1])
@@ -1120,6 +1128,12 @@ def run_app(argv: list[str]) -> int:
                 links.append(link)
         except Exception as e:
             on_status(f"Phone link failed to start: {e}")
+    if _app_config_api().get("enabled", True):
+        try:
+            from ..server.api import start_in_background
+            start_in_background(engine, port=int(_app_config_api().get("port", 8790)))
+        except Exception as e:
+            print(f"[app api] not started: {type(e).__name__}: {e}", flush=True)
     health = getattr(engine, "health", None)
     if health is not None:
         health.extras["heartbeat"] = heartbeat

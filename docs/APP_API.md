@@ -1,0 +1,79 @@
+# FafnirAI app API (stage 1)
+
+The back end the FafnirAI phone app will talk to. It starts with the desktop app and listens on
+`127.0.0.1:8790` only: nothing on your home network or the internet can reach it. Reaching it from your
+phone outside the house will go through Tailscale (stage 6), which forwards to this address privately.
+
+## Set up your account (on this PC)
+
+```
+.venv\Scripts\python main.py --app-user-add YOURNAME
+```
+
+You choose a password (at least 10 characters). Owner accounts also need a 6-digit code from an
+authenticator app (Google Authenticator, Microsoft Authenticator, Authy): the command prints a setup key
+to type into that app. Other commands:
+
+```
+.venv\Scripts\python main.py --app-user-list
+.venv\Scripts\python main.py --app-user-passwd YOURNAME     (also signs every device out)
+.venv\Scripts\python main.py --app-user-add NAME --viewer    (read-only account, no code needed)
+.venv\Scripts\python main.py --app-user-remove NAME
+```
+
+Accounts can't be created over the network. Password reset is done here on the PC; email verification and
+email-based reset come when outbound email for the business is set up.
+
+## Security
+
+| Control | Detail |
+|---|---|
+| Passwords | scrypt, salted; weak ones refused |
+| Second factor | Required for owner accounts (TOTP, 30 s, one step of clock drift allowed); secret stored encrypted |
+| Tokens | Access token 15 min; refresh token 30 days, replaced on every use; an old refresh token coming back ends the whole session (it was copied). Only hashes are stored |
+| Lockout | 5 wrong passwords or codes per account or address in 15 min: locked 15 min |
+| Permissions | owner: read, chat, control, admin. viewer: read only. Checked on every route |
+| Rate limit | 120 requests a minute per signed-in device |
+| Live feed | WebSocket; the token is sent as the first message (never in the URL, so never in a log); closed when the session ends |
+| Logging | Sign-ins, failures, refresh-token reuse, approvals, kill switch and integration changes go into the tamper-evident action log |
+| Exposure | 127.0.0.1 only; docs pages switched off; `no-store`, `nosniff`, `DENY` framing headers |
+| Secrets | API keys stay in the vault on the PC; the API never returns them and can't set them |
+
+## Routes
+
+| Route | Needs | What |
+|---|---|---|
+| `POST /auth/login` | - | username, password, code, device -> tokens |
+| `POST /auth/refresh` | - | refresh token -> new tokens |
+| `POST /auth/logout`, `/auth/logout-all` | signed in | end this device / every device |
+| `GET /auth/sessions`, `DELETE /auth/sessions/{id}` | signed in | your signed-in devices |
+| `GET /api/status` | read | state, brain, profile, kill switch, health problems, pending approval |
+| `GET /api/now` | read | the Right Now briefing and items |
+| `GET /api/health` | read | every health check |
+| `GET /api/events/recent?after=N` | read | events since N |
+| `WS /api/events` | read | live: heard, reply text, tools, notices, errors, approvals, Right Now |
+| `POST /api/chat` | chat | talk to Fafnir; waits up to 3 minutes for the reply |
+| `GET /api/approvals`, `POST /api/approvals/current` | read / control | what Fafnir is waiting on; yes or no |
+| `POST /api/killswitch`, `POST /api/interrupt` | control | stop everything / stop talking |
+| `GET /api/integrations`, `PUT /api/integrations/{id}` | read / admin | outside services and their switches |
+
+## Integrations
+
+Higgsfield, Gemini, OpenAI, the Anthropic API, Stripe, Firebase and Tailscale each have a switch (Settings >
+Integrations, `[integrations]` in `config.toml`, or the API). All start off. A switch can only be turned
+on once the service is ready: its key in the vault (`python main.py --secret-set NAME`), or for Tailscale,
+the program installed. Nothing uses a service until its switch is on.
+
+## Tested
+
+`.venv\Scripts\python -m pytest tests\test_api.py -q`: 15 tests (hashing, weak passwords, lockout, MFA,
+viewer limits, every route refusing a missing or made-up token, refresh rotation and reuse detection,
+expiry, logout and logout-all, password change signing everyone out, chat, approvals, kill switch,
+integration switches, the live feed, rate limiting). Also checked against the running Fafnir with a
+temporary read-only account: sign-in, status, Right Now, refusals, live feed, and that the port is not
+reachable from the home network.
+
+## Not in stage 1
+
+A persistent approval queue (today only the one question Fafnir is currently asking), agents, business
+data, push notifications, and remote access. Those are stages 2 to 6.

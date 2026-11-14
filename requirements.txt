@@ -22,3 +22,6 @@ soundfile
 livekit
 # spotting running games (gaming-aware profiles)
 psutil
+# the phone app's API
+fastapi
+uvicorn

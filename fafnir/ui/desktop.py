@@ -46,6 +46,14 @@ def _ps(script: str, timeout: int = 15) -> str:
         return ""
 
 
+def _integrations() -> list:
+    try:
+        from .. import integrations
+        return integrations.status()
+    except Exception:
+        return []
+
+
 class DesktopEvents(QObject, Events):
     """Engine events (background threads) -> UI thread -> the page."""
     post = Signal(str)
@@ -136,6 +144,7 @@ class DesktopBridge(QObject):
             self.emit("result", id=req, ok=True, data={"values": config_edit.current(), "when": when,
                                                       "restartNeeded": self.w.restart_needed,
                                                       "outbound": audit.outbound_summary(24),
+                                                      "integrations": _integrations(),
                                                       "health": self._health_rows()})
         except Exception as e:
             self.emit("result", id=req, ok=False, error=f"Couldn't read config.toml: {e}")
@@ -517,7 +526,13 @@ class DesktopWindow(QWebEngineView):
         briefing, items = rank(d, vips)
         if self._briefing_override and time.monotonic() < self._briefing_override[1]:
             briefing = self._briefing_override[0]
-        self.bridge.emit("briefing", text=briefing, items=[{k: v for k, v in i.items() if k != "score"} for i in items])
+        shown = [{k: v for k, v in i.items() if k != "score"} for i in items]
+        self.bridge.emit("briefing", text=briefing, items=shown)
+        try:
+            from ..server import hub
+            hub.publish("now", briefing=briefing, items=shown)   # the phone app's Right Now
+        except Exception:
+            pass
 
     def _recent_activity(self) -> list:
         out = []

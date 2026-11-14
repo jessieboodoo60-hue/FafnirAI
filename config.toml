@@ -205,3 +205,20 @@ model = "eleven_flash_v2_5"
 [voice.mic_for_speaker]
 "Primus" = "Primus Headset"
 "JBL" = "USB 2.0 Camera"
+
+[api]
+# The back end the FafnirAI phone app talks to. Listens on this PC only (127.0.0.1); reaching it
+# from outside will go through Tailscale. Create your account with: python main.py --app-user-add NAME
+enabled = true
+port = 8790
+
+[integrations]
+# Outside services, each off until you turn it on (here or in Settings > Integrations). A switch only
+# turns on once the service's key is in the vault: python main.py --secret-set NAME
+higgsfield = false
+gemini = false
+openai = false
+anthropic_api = false
+stripe = false
+firebase = false
+tailscale = false

@@ -67,3 +67,7 @@ coordinated by one orchestrator; most of them only wake up when there is work.
   your approval, at every autonomy level.
 - No public exposure of Ollama, the database or Fafnir's internal services.
 - Nothing is claimed to work until it has been run and tested.
+
+## Progress
+
+- **Stage 1 done (2026-11-14):** the app API (accounts with scrypt passwords and a required authenticator code for owners, rotating refresh tokens with reuse detection, lockout, roles, rate limits, live WebSocket feed, chat, approvals, kill switch, health, Right Now) on 127.0.0.1:8790, plus integration switches that stay off until a key exists. 15 automated tests and a live check. Details: docs/APP_API.md.

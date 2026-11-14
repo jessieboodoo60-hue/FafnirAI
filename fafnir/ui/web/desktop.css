@@ -348,3 +348,4 @@ body.solo #wallpaper, body.solo #menubar, body.solo #dock-wrap, body.solo #widge
 body.solo .win { --glass: #1e1f24; -webkit-backdrop-filter: none; backdrop-filter: none; border-radius: 0; box-shadow: none; }
 body.solo .win.inactive { box-shadow: none; }
 body.solo .glass::before { display: none; }
+.switch.off-ready { opacity: .45; }

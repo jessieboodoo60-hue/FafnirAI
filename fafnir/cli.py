@@ -106,6 +106,47 @@ def main(argv: list[str] | None = None) -> int:
             print(str(e))
             return 1
         return 0
+    if any(a in argv for a in ("--app-user-add", "--app-user-list", "--app-user-passwd", "--app-user-remove")):
+        import getpass
+        from .config import ROOT
+        from .server.auth import AuthStore
+        store = AuthStore(ROOT / "data" / "app_users.db")
+
+        def arg(flag):
+            i = argv.index(flag) + 1
+            return argv[i] if i < len(argv) and not argv[i].startswith("--") else None
+        try:
+            if "--app-user-list" in argv:
+                for u in store.users():
+                    print(f"  {u['username']}  ({u['role']}, {'authenticator code required' if u['mfa'] else 'password only'}, since {u['created']})")
+                return 0
+            name = arg(next(a for a in ("--app-user-add", "--app-user-passwd", "--app-user-remove") if a in argv))
+            if not name:
+                print("Usage: python main.py --app-user-add NAME [--viewer] | --app-user-passwd NAME | --app-user-remove NAME | --app-user-list")
+                return 1
+            if "--app-user-remove" in argv:
+                store.remove_user(name)
+                print(f"Removed {name} and signed out all of their devices.")
+                return 0
+            pw = getpass.getpass("New password (at least 10 characters, hidden): ")
+            if pw != getpass.getpass("Same password again: "):
+                print("The two passwords didn't match. Nothing was changed.")
+                return 1
+            if "--app-user-passwd" in argv:
+                store.set_password(name, pw)
+                print(f"Password changed for {name}; every device was signed out.")
+                return 0
+            secret = store.add_user(name, pw, role="viewer" if "--viewer" in argv else "owner")
+            print(f"Account {name} created.")
+            if secret:
+                print("\nOwner accounts also need a code from an authenticator app (Google Authenticator, Microsoft")
+                print("Authenticator, Authy...). In the app choose 'enter a setup key' and type:")
+                print(f"\n    Account: FafnirAI ({name})\n    Key:     {' '.join(secret[i:i + 4] for i in range(0, len(secret), 4))}\n    Type:    time-based\n")
+                print("Keep this key private; it's only shown now.")
+        except ValueError as e:
+            print(str(e))
+            return 1
+        return 0
     if "--health" in argv:
         from .health import main as health_main
         return health_main()
